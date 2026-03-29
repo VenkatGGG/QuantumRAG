@@ -266,6 +266,7 @@ class HeuristicChunker:
         
         This is an emergency fallback that shouldn't normally be needed.
         Uses the tokenizer to find the right truncation point.
+        Revalidates with count_tokens() to guarantee max_tokens is not exceeded.
         
         Args:
             text: Text to truncate.
@@ -274,14 +275,34 @@ class HeuristicChunker:
         Returns:
             Truncated text.
         """
+        # Account for special tokens ([CLS] and [SEP] = 2 tokens)
+        # when encoding without special tokens
+        effective_max = max_tokens - 2
+        
         tokens = self.tokenizer.encode(text, add_special_tokens=False)
         
-        if len(tokens) <= max_tokens:
-            return text
+        if len(tokens) <= effective_max:
+            # Revalidate with count_tokens to ensure consistency
+            if self.count_tokens(text) <= max_tokens:
+                return text
+            # If count_tokens reports more, we need to truncate more
+            effective_max = max_tokens - 2
         
         # Truncate tokens and decode back to text
-        truncated_tokens = tokens[:max_tokens]
+        truncated_tokens = tokens[:effective_max]
         truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
+        
+        # Revalidate with count_tokens to guarantee the limit
+        final_token_count = self.count_tokens(truncated_text)
+        if final_token_count > max_tokens:
+            # If still over, truncate more aggressively
+            # This can happen with tokenization edge cases
+            excess = final_token_count - max_tokens
+            safe_max = effective_max - excess - 5  # Extra safety margin
+            if safe_max < 0:
+                safe_max = 0
+            truncated_tokens = tokens[:safe_max]
+            truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
         
         return truncated_text
 
