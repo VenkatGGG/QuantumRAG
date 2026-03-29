@@ -42,7 +42,8 @@ def client(mock_vector_store, mock_embedding_pipeline):
     with patch("src.main.vector_store", mock_vector_store), \
          patch("src.main.embedding_pipeline", mock_embedding_pipeline):
         from src.main import app
-        return TestClient(app)
+        with TestClient(app) as test_client:
+            yield test_client
 
 
 class TestStatusEndpoint:
