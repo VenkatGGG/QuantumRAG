@@ -42,11 +42,20 @@ class TestWikipediaScraper:
             # Check if this is a search request (has 'list' param)
             params = kwargs.get('params', {})
             if params.get('list') == 'search':
-                # Return search results
+                # Return search results with quantum-relevant titles
                 mock_resp.json.return_value = {
                     "query": {
                         "search": [
-                            {"title": f"Article {i}"} for i in range(1, 11)
+                            {"title": "Quantum cryptography"},
+                            {"title": "Quantum key distribution"},
+                            {"title": "Post-quantum cryptography"},
+                            {"title": "Quantum computing"},
+                            {"title": "Quantum network"},
+                            {"title": "Quantum entanglement"},
+                            {"title": "Quantum information science"},
+                            {"title": "Relativistic quantum cryptography"},
+                            {"title": "Quantum channel"},
+                            {"title": "Quantum communication"}
                         ]
                     }
                 }
@@ -91,25 +100,26 @@ class TestWikipediaScraper:
             
             params = kwargs.get('params', {})
             if params.get('list') == 'search':
-                # Return search results
+                # Return search results with quantum-relevant titles
                 mock_resp.json.return_value = {
                     "query": {
                         "search": [
-                            {"title": "Exists 1"},
-                            {"title": "Missing"},
-                            {"title": "Exists 2"}
+                            {"title": "Quantum cryptography"},
+                            {"title": "Quantum key distribution"},
+                            {"title": "Quantum computing"}
                         ]
                     }
                 }
             else:
                 # This is a content fetch request
                 title = params.get('titles', '')
-                if title == "Missing":
+                # Simulate that "Quantum key distribution" is missing
+                if title == "Quantum key distribution":
                     mock_resp.json.return_value = {
                         "query": {
                             "pages": {
                                 "456": {
-                                    "title": "Missing",
+                                    "title": "Quantum key distribution",
                                     "missing": True
                                 }
                             }
@@ -135,7 +145,7 @@ class TestWikipediaScraper:
         
         # Should only return existing pages with content
         assert len(articles) > 0
-        assert all(a["title"] != "Missing" for a in articles)
+        assert all(a["title"] != "Quantum key distribution" for a in articles)
 
     @patch("src.wikipedia_scraper.httpx.get")
     def test_search_uses_search_term(self, mock_get):
@@ -162,6 +172,7 @@ class TestWikipediaScraper:
                         }
                     }
                 elif search_term == "Machine Learning":
+                    # These will be filtered out as non-quantum
                     mock_resp.json.return_value = {
                         "query": {
                             "search": [
@@ -190,18 +201,15 @@ class TestWikipediaScraper:
         
         scraper = WikipediaScraper()
         
-        # Test with Quantum Cryptography
+        # Test with Quantum Cryptography - should get quantum-relevant results
         articles1 = scraper.fetch_articles("Quantum Cryptography", limit=2)
         titles1 = [a["title"] for a in articles1]
         assert "Quantum cryptography" in titles1 or "Quantum key distribution" in titles1
         
-        # Test with Machine Learning - should get different results
+        # Test with Machine Learning - results will be filtered out (non-quantum)
         articles2 = scraper.fetch_articles("Machine Learning", limit=2)
-        titles2 = [a["title"] for a in articles2]
-        assert "Machine learning" in titles2 or "Deep learning" in titles2
-        
-        # Results should be different
-        assert titles1 != titles2
+        # Machine learning articles are filtered as non-quantum
+        assert len(articles2) == 0
 
     def test_save_articles_creates_valid_json(self, tmp_path):
         """Verify articles are saved as valid JSON."""
@@ -219,3 +227,93 @@ class TestWikipediaScraper:
         
         assert len(loaded) == 1
         assert loaded[0]["title"] == "Test Article"
+
+
+class TestQuantumRelevanceFiltering:
+    """Test cases for quantum cryptography relevance filtering."""
+
+    def test_quantum_relevant_titles_accepted(self):
+        """Verify quantum-relevant article titles are accepted."""
+        scraper = WikipediaScraper()
+        
+        quantum_titles = [
+            "Quantum cryptography",
+            "Quantum key distribution",
+            "Post-quantum cryptography",
+            "Quantum computing",
+            "Quantum entanglement",
+            "BB84 protocol",
+            "Quantum network",
+            "QKD",
+            "Relativistic quantum cryptography"
+        ]
+        
+        for title in quantum_titles:
+            assert scraper._is_quantum_relevant(title), f"'{title}' should be quantum-relevant"
+
+    def test_generic_crypto_titles_rejected(self):
+        """Verify generic cryptography titles are rejected."""
+        scraper = WikipediaScraper()
+        
+        generic_titles = [
+            "Cryptography",
+            "Key (cryptography)",
+            "Public-key cryptography",
+            "Symmetric-key algorithm",
+            "Elliptic-curve cryptography",
+            "RSA (cryptosystem)",
+            "AES",
+            "Digital signature"
+        ]
+        
+        for title in generic_titles:
+            assert not scraper._is_quantum_relevant(title), f"'{title}' should be rejected as non-quantum"
+
+    def test_filter_quantum_relevant_removes_non_quantum(self):
+        """Verify filtering removes non-quantum articles."""
+        scraper = WikipediaScraper()
+        
+        mixed_titles = [
+            "Quantum cryptography",
+            "Cryptography",
+            "Quantum key distribution",
+            "Key (cryptography)",
+            "Quantum computing"
+        ]
+        
+        filtered = scraper._filter_quantum_relevant(mixed_titles)
+        
+        # Should keep quantum-relevant titles
+        assert "Quantum cryptography" in filtered
+        assert "Quantum key distribution" in filtered
+        assert "Quantum computing" in filtered
+        
+        # Should remove generic cryptography titles
+        assert "Cryptography" not in filtered
+        assert "Key (cryptography)" not in filtered
+        
+        # Should have exactly 3 results
+        assert len(filtered) == 3
+
+    def test_fetch_articles_returns_quantum_specific(self):
+        """Verify fetch_articles returns quantum-specific articles."""
+        scraper = WikipediaScraper()
+        
+        # Test with mock search results
+        titles = scraper._search_articles("Quantum Cryptography", limit=15)
+        filtered = scraper._filter_quantum_relevant(titles)
+        
+        # All filtered results should contain quantum keywords
+        for title in filtered:
+            assert scraper._is_quantum_relevant(title), f"'{title}' should be quantum-relevant"
+        
+        # Should not contain generic cryptography articles
+        generic_crypto = [
+            "Cryptography",
+            "Key (cryptography)",
+            "Public-key cryptography",
+            "Symmetric-key algorithm"
+        ]
+        
+        for generic in generic_crypto:
+            assert generic not in filtered, f"Generic crypto article '{generic}' should be filtered out"
