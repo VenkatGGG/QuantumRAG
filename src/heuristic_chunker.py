@@ -115,6 +115,40 @@ class HeuristicChunker:
         
         return end_idx
     
+    def _find_sentences_for_overlap(self, sentences: List[str], end_idx: int, target_tokens: int) -> int:
+        """Find how many sentences to include for exactly target_tokens of overlap.
+        
+        Walks backwards from end_idx to find sentences that fit within target_tokens.
+        Allows slight overflow (up to 5 tokens) to get closer to the target.
+        
+        Args:
+            sentences: List of all sentences.
+            end_idx: The index after the last sentence of the current chunk (exclusive).
+            target_tokens: Target number of tokens for overlap.
+            
+        Returns:
+            Number of sentences to include in the overlap.
+        """
+        overlap_tokens = 0
+        overlap_sentences = 0
+        
+        # Walk backwards from end_idx - 1 to find sentences for overlap
+        for i in range(end_idx - 1, -1, -1):
+            sentence_tokens = self.count_tokens(sentences[i])
+            # Skip sentences larger than the overlap limit
+            if sentence_tokens > target_tokens:
+                continue
+            # Count tokens for this sentence (no separator for first/only sentence)
+            separator = 1 if overlap_sentences > 0 else 0
+            new_total = overlap_tokens + sentence_tokens + separator
+            # Allow up to 5 tokens over the target to get closer to desired overlap
+            if new_total > target_tokens + 5:
+                break
+            overlap_tokens += sentence_tokens + separator
+            overlap_sentences += 1
+        
+        return overlap_sentences, overlap_tokens
+
     def chunk(self, text: str) -> List[str]:
         """Split text into chunks of at most 500 tokens with 50-token overlap.
         
@@ -144,34 +178,21 @@ class HeuristicChunker:
         current_idx = 0
         
         while current_idx < len(sentences):
-            # Calculate effective chunk size (accounting for overlap from previous chunk)
+            # Find the boundary for this chunk starting from current_idx
+            # Account for the overlap from previous chunk by reducing effective chunk size
             if chunks:
-                # We need to include overlap from the previous chunk
-                # Find sentences that provide approximately OVERLAP tokens
-                overlap_tokens = 0
-                overlap_start_idx = current_idx
-                
-                # Walk backwards through sentences to find overlap
-                for i in range(current_idx - 1, -1, -1):
-                    sentence_tokens = self.count_tokens(sentences[i])
-                    # Skip sentences larger than overlap limit
-                    if sentence_tokens > self.OVERLAP:
-                        continue
-                    if overlap_tokens + sentence_tokens + 1 > self.OVERLAP:
-                        break
-                    overlap_tokens += sentence_tokens + 1  # +1 for space
-                    overlap_start_idx = i
-                
-                # Adjust start index to include overlap
-                actual_start_idx = overlap_start_idx
+                # Calculate how many tokens of overlap we have
+                overlap_sentences, overlap_tokens = self._find_sentences_for_overlap(
+                    sentences, current_idx, self.OVERLAP
+                )
+                effective_chunk_size = self.CHUNK_SIZE - overlap_tokens
             else:
-                actual_start_idx = current_idx
+                effective_chunk_size = self.CHUNK_SIZE
             
-            # Find the boundary for this chunk
             end_idx = self._find_chunk_boundary(
                 sentences, 
-                actual_start_idx, 
-                self.CHUNK_SIZE
+                current_idx, 
+                effective_chunk_size
             )
             
             # Ensure we make progress (at least one new sentence)
@@ -180,7 +201,7 @@ class HeuristicChunker:
                 end_idx = current_idx + 1
             
             # Build the chunk text
-            chunk_sentences = sentences[actual_start_idx:end_idx]
+            chunk_sentences = sentences[current_idx:end_idx]
             chunk_text = " ".join(chunk_sentences)
             
             # Verify token count
@@ -196,35 +217,22 @@ class HeuristicChunker:
             chunks.append(chunk_text)
             
             # Move to next position, accounting for overlap
-            # We want the next chunk to start where this one ended, minus overlap
             if end_idx >= len(sentences):
                 break
             
             # Calculate how many sentences to step back for overlap
-            # Only include NEW content (from current_idx to end_idx) in the overlap
-            # Don't include the overlap portion from the start (actual_start_idx to current_idx)
-            overlap_tokens_needed = self.OVERLAP
-            overlap_sentences = 0
-            overlap_tokens = 0
-            
-            for i in range(end_idx - 1, current_idx - 1, -1):
-                sentence_tokens = self.count_tokens(sentences[i])
-                # Skip sentences that are themselves larger than the overlap limit
-                if sentence_tokens > overlap_tokens_needed:
-                    continue
-                # Check if adding this sentence would exceed the overlap limit
-                # Add 1 for space separator (except for the first sentence added)
-                separator = 1 if overlap_sentences > 0 else 0
-                if overlap_tokens + sentence_tokens + separator > overlap_tokens_needed:
-                    break
-                overlap_tokens += sentence_tokens + separator
-                overlap_sentences += 1
+            # This determines where the next chunk starts
+            overlap_sentences, overlap_tokens = self._find_sentences_for_overlap(
+                sentences, 
+                end_idx, 
+                self.OVERLAP
+            )
             
             # Move current_idx forward, but step back for overlap
             current_idx = end_idx - overlap_sentences
             
             # Ensure we always make progress
-            if current_idx <= actual_start_idx and end_idx > actual_start_idx:
+            if current_idx >= end_idx:
                 current_idx = end_idx
         
         return chunks
