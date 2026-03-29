@@ -80,8 +80,51 @@ class WikipediaScraper:
             print(f"Error fetching {title}: {e}")
             return None
     
+    def _search_articles(self, search_term: str, limit: int = 10) -> List[str]:
+        """Search Wikipedia for articles related to a search term.
+        
+        Uses the Wikipedia API's search action to find relevant articles.
+        
+        Args:
+            search_term: Term to search for.
+            limit: Maximum number of results to return.
+            
+        Returns:
+            List of article titles matching the search.
+        """
+        self._apply_rate_limit()
+        
+        params = {
+            "action": "query",
+            "format": "json",
+            "list": "search",
+            "srsearch": search_term,
+            "srlimit": limit,
+            "srprop": "",
+        }
+        
+        try:
+            response = httpx.get(
+                self.base_url,
+                headers=self.headers,
+                params=params,
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            search_results = data.get("query", {}).get("search", [])
+            titles = [result["title"] for result in search_results]
+            return titles
+        except Exception as e:
+            print(f"Error searching for '{search_term}': {e}")
+            return []
+    
     def fetch_articles(self, search_term: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Fetch articles from Wikipedia related to search term.
+        
+        Uses Wikipedia's search API to find relevant articles dynamically
+        based on the provided search_term, then fetches their content.
         
         Args:
             search_term: Term to search for.
@@ -90,28 +133,16 @@ class WikipediaScraper:
         Returns:
             List of article dictionaries with title, url, and text.
         """
+        # First, search for articles related to the search term
+        titles = self._search_articles(search_term, limit=limit)
+        
+        if not titles:
+            print(f"No search results found for '{search_term}'")
+            return []
+        
         articles = []
         
-        # Use predefined list of Quantum Cryptography related articles
-        quantum_crypto_articles = [
-            "Quantum cryptography",
-            "Quantum key distribution",
-            "BB84",
-            "Quantum teleportation",
-            "Quantum computing",
-            "Post-quantum cryptography",
-            "Quantum entanglement",
-            "Quantum information science",
-            "Quantum network",
-            "Quantum communication",
-            "Quantum cryptography protocol",
-            "Device-independent quantum cryptography",
-            "Ekert protocol",
-            "Quantum money",
-            "Quantum digital signature"
-        ]
-        
-        for title in quantum_crypto_articles:
+        for title in titles:
             if len(articles) >= limit:
                 break
             

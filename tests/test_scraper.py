@@ -30,23 +30,39 @@ class TestWikipediaScraper:
 
     @patch("src.wikipedia_scraper.httpx.get")
     def test_fetch_articles_count(self, mock_get):
-        """Verify scraper fetches exactly 10 articles."""
-        # Setup mock
+        """Verify scraper fetches exactly 10 articles using search API."""
+        call_count = [0]
+        
         def mock_response(url, **kwargs):
+            call_count[0] += 1
             mock_resp = Mock()
             mock_resp.status_code = 200
             mock_resp.raise_for_status = Mock()
-            # Extract title from URL params
-            mock_resp.json.return_value = {
-                "query": {
-                    "pages": {
-                        "123": {
-                            "title": "Mock Article",
-                            "extract": "This is the full text content for the article. " * 50
+            
+            # Check if this is a search request (has 'list' param)
+            params = kwargs.get('params', {})
+            if params.get('list') == 'search':
+                # Return search results
+                mock_resp.json.return_value = {
+                    "query": {
+                        "search": [
+                            {"title": f"Article {i}"} for i in range(1, 11)
+                        ]
+                    }
+                }
+            else:
+                # This is a content fetch request
+                title = params.get('titles', 'Unknown')
+                mock_resp.json.return_value = {
+                    "query": {
+                        "pages": {
+                            str(call_count[0]): {
+                                "title": title,
+                                "extract": f"This is the full text content for {title}. " * 50
+                            }
                         }
                     }
                 }
-            }
             return mock_resp
         
         mock_get.side_effect = mock_response
@@ -73,29 +89,43 @@ class TestWikipediaScraper:
             mock_resp.status_code = 200
             mock_resp.raise_for_status = Mock()
             
-            # Return missing for some pages
-            if call_count[0] % 2 == 0:
+            params = kwargs.get('params', {})
+            if params.get('list') == 'search':
+                # Return search results
                 mock_resp.json.return_value = {
                     "query": {
-                        "pages": {
-                            "456": {
-                                "title": "Missing",
-                                "missing": True
-                            }
-                        }
+                        "search": [
+                            {"title": "Exists 1"},
+                            {"title": "Missing"},
+                            {"title": "Exists 2"}
+                        ]
                     }
                 }
             else:
-                mock_resp.json.return_value = {
-                    "query": {
-                        "pages": {
-                            "789": {
-                                "title": f"Exists {call_count[0]}",
-                                "extract": f"Content for article {call_count[0]}"
+                # This is a content fetch request
+                title = params.get('titles', '')
+                if title == "Missing":
+                    mock_resp.json.return_value = {
+                        "query": {
+                            "pages": {
+                                "456": {
+                                    "title": "Missing",
+                                    "missing": True
+                                }
                             }
                         }
                     }
-                }
+                else:
+                    mock_resp.json.return_value = {
+                        "query": {
+                            "pages": {
+                                "789": {
+                                    "title": title,
+                                    "extract": f"Content for {title}"
+                                }
+                            }
+                        }
+                    }
             return mock_resp
         
         mock_get.side_effect = mock_response
@@ -106,6 +136,72 @@ class TestWikipediaScraper:
         # Should only return existing pages with content
         assert len(articles) > 0
         assert all(a["title"] != "Missing" for a in articles)
+
+    @patch("src.wikipedia_scraper.httpx.get")
+    def test_search_uses_search_term(self, mock_get):
+        """Verify scraper uses search_term parameter to find articles."""
+        call_count = [0]
+        
+        def mock_response(url, **kwargs):
+            call_count[0] += 1
+            mock_resp = Mock()
+            mock_resp.status_code = 200
+            mock_resp.raise_for_status = Mock()
+            
+            params = kwargs.get('params', {})
+            if params.get('list') == 'search':
+                search_term = params.get('srsearch', '')
+                # Return different results based on search term
+                if search_term == "Quantum Cryptography":
+                    mock_resp.json.return_value = {
+                        "query": {
+                            "search": [
+                                {"title": "Quantum cryptography"},
+                                {"title": "Quantum key distribution"}
+                            ]
+                        }
+                    }
+                elif search_term == "Machine Learning":
+                    mock_resp.json.return_value = {
+                        "query": {
+                            "search": [
+                                {"title": "Machine learning"},
+                                {"title": "Deep learning"}
+                            ]
+                        }
+                    }
+                else:
+                    mock_resp.json.return_value = {"query": {"search": []}}
+            else:
+                title = params.get('titles', 'Unknown')
+                mock_resp.json.return_value = {
+                    "query": {
+                        "pages": {
+                            "123": {
+                                "title": title,
+                                "extract": f"Content for {title}"
+                            }
+                        }
+                    }
+                }
+            return mock_resp
+        
+        mock_get.side_effect = mock_response
+        
+        scraper = WikipediaScraper()
+        
+        # Test with Quantum Cryptography
+        articles1 = scraper.fetch_articles("Quantum Cryptography", limit=2)
+        titles1 = [a["title"] for a in articles1]
+        assert "Quantum cryptography" in titles1 or "Quantum key distribution" in titles1
+        
+        # Test with Machine Learning - should get different results
+        articles2 = scraper.fetch_articles("Machine Learning", limit=2)
+        titles2 = [a["title"] for a in articles2]
+        assert "Machine learning" in titles2 or "Deep learning" in titles2
+        
+        # Results should be different
+        assert titles1 != titles2
 
     def test_save_articles_creates_valid_json(self, tmp_path):
         """Verify articles are saved as valid JSON."""
