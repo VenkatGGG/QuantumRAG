@@ -10,47 +10,48 @@ This module tests the API endpoints including:
 import pytest
 from fastapi.testclient import TestClient
 import numpy as np
-import tempfile
-import os
-from unittest.mock import patch, MagicMock, PropertyMock
-
-# Create mock instances before importing the app
-mock_vector_store_instance = MagicMock()
-mock_vector_store_instance.size = 10
-mock_vector_store_instance.dimension = 384
-mock_vector_store_instance.search.return_value = [
-    {"text": "Sample text 1", "similarity": 0.95},
-    {"text": "Sample text 2", "similarity": 0.87},
-    {"text": "Sample text 3", "similarity": 0.82},
-]
-
-mock_embedding_pipeline_instance = MagicMock()
-mock_embedding_pipeline_instance.embed.return_value = np.random.randn(384)
-mock_embedding_pipeline_instance.EMBEDDING_DIM = 384
-
-# Patch before importing
-with patch("src.main.vector_store", mock_vector_store_instance), \
-     patch("src.main.embedding_pipeline", None):
-    from src.main import app
-
-
-@pytest.fixture
-def client():
-    """Create a test client."""
-    return TestClient(app)
+from unittest.mock import patch, MagicMock
 
 
 @pytest.fixture
 def mock_vector_store():
-    """Get the mock vector store instance."""
-    return mock_vector_store_instance
+    """Create a mock vector store instance."""
+    mock = MagicMock()
+    mock.size = 10
+    mock.dimension = 384
+    mock.search.return_value = [
+        {"text": "Sample text 1", "similarity": 0.95},
+        {"text": "Sample text 2", "similarity": 0.87},
+        {"text": "Sample text 3", "similarity": 0.82},
+    ]
+    return mock
+
+
+@pytest.fixture
+def mock_embedding_pipeline():
+    """Create a mock embedding pipeline instance."""
+    mock = MagicMock()
+    mock.embed.return_value = np.random.randn(384)
+    mock.EMBEDDING_DIM = 384
+    return mock
+
+
+@pytest.fixture
+def client(mock_vector_store, mock_embedding_pipeline):
+    """Create a test client with mocked dependencies."""
+    with patch("src.main.vector_store", mock_vector_store), \
+         patch("src.main.embedding_pipeline", mock_embedding_pipeline):
+        from src.main import app
+        return TestClient(app)
 
 
 class TestStatusEndpoint:
     """Tests for the GET /status endpoint."""
     
-    def test_status_returns_chunk_count(self, client):
+    def test_status_returns_chunk_count(self, client, mock_vector_store):
         """Test that /status returns the chunk_count field."""
+        mock_vector_store.size = 10
+        
         response = client.get("/status")
         
         assert response.status_code == 200
@@ -58,8 +59,10 @@ class TestStatusEndpoint:
         assert "chunk_count" in data
         assert data["chunk_count"] == 10
     
-    def test_status_returns_vector_dimensions(self, client):
+    def test_status_returns_vector_dimensions(self, client, mock_vector_store):
         """Test that /status returns the vector_dimensions field."""
+        mock_vector_store.dimension = 384
+        
         response = client.get("/status")
         
         assert response.status_code == 200
@@ -101,6 +104,7 @@ class TestQueryEndpoint:
     def test_query_defaults_to_k_5(self, client, mock_vector_store):
         """Test that /query defaults to k=5 when not specified."""
         mock_vector_store.reset_mock()
+        mock_vector_store.size = 10
         
         response = client.post(
             "/query",
@@ -190,7 +194,7 @@ class TestCORSMiddleware:
     
     def test_cors_headers_present_on_status(self, client):
         """Test that CORS headers are present on /status response."""
-        response = client.get("/status")
+        response = client.get("/status", headers={"Origin": "http://localhost:3000"})
         
         assert "access-control-allow-origin" in response.headers
     
@@ -198,7 +202,8 @@ class TestCORSMiddleware:
         """Test that CORS headers are present on /query response."""
         response = client.post(
             "/query",
-            json={"query": "test"}
+            json={"query": "test"},
+            headers={"Origin": "http://localhost:3000"}
         )
         
         assert "access-control-allow-origin" in response.headers
