@@ -56,7 +56,14 @@ class TestHeuristicChunker:
             chunk2 = chunks[i + 1]
             
             # Find the overlap by checking how much of chunk1's end appears in chunk2's start
-            overlap_tokens = chunker._find_overlap_tokens(chunk1, chunk2)
+            overlap_text = ""
+            max_overlap = min(len(chunk1), len(chunk2))
+            for j in range(max_overlap, 0, -1):
+                if chunk2.startswith(chunk1[-j:]):
+                    overlap_text = chunk1[-j:]
+                    break
+            
+            overlap_tokens = chunker.count_tokens(overlap_text) if overlap_text else 0
             
             assert abs(overlap_tokens - 50) <= 5, f"Overlap between chunk {i} and {i+1} is {overlap_tokens} tokens, expected 50"
 

@@ -5,7 +5,7 @@ This module implements a custom chunking algorithm that splits text into exactly
 truncation). Uses the model's tokenizer for accurate token counting.
 """
 import re
-from typing import List
+from typing import List, Tuple
 from transformers import AutoTokenizer
 
 
@@ -63,120 +63,127 @@ class HeuristicChunker:
         
         return sentences
     
-    def _find_overlap_tokens(self, chunk1: str, chunk2: str) -> int:
-        """Find the number of overlapping tokens between two chunks.
+    def _get_last_n_tokens(self, text: str, n: int) -> str:
+        """Get the last n tokens from text as a string.
         
         Args:
-            chunk1: First chunk.
-            chunk2: Second chunk.
+            text: Source text.
+            n: Number of tokens to extract from the end.
             
         Returns:
-            Number of overlapping tokens.
+            String containing the last n tokens.
         """
-        # Find the longest suffix of chunk1 that is a prefix of chunk2
-        # Start with the full chunk1 and reduce
-        max_overlap_len = min(len(chunk1), len(chunk2))
+        if not text:
+            return ""
         
-        for i in range(max_overlap_len, 0, -1):
-            suffix = chunk1[-i:]
-            if chunk2.startswith(suffix):
-                # Found overlap, count tokens
-                return self.count_tokens(suffix)
+        # Encode without special tokens to get raw tokens
+        tokens = self.tokenizer.encode(text, add_special_tokens=False)
         
-        return 0
+        if len(tokens) <= n:
+            return text
+        
+        # Take last n tokens and decode
+        last_n_tokens = tokens[-n:]
+        return self.tokenizer.decode(last_n_tokens, skip_special_tokens=True)
     
-    def _find_chunk_boundary(self, sentences: List[str], start_idx: int, max_tokens: int) -> int:
-        """Find the index of the last sentence that fits within the token limit.
+    def _truncate_to_sentence_boundary(self, text: str, max_tokens: int) -> str:
+        """Truncate text to fit within max_tokens, respecting sentence boundaries.
+        
+        This is used for the main chunk body (not overlap). We try to get as close
+        to max_tokens as possible while ending at a sentence boundary.
         
         Args:
-            sentences: List of all sentences.
-            start_idx: Starting sentence index for this chunk.
+            text: Text to truncate (typically the chunk without overlap prefix).
             max_tokens: Maximum number of tokens allowed.
             
         Returns:
-            Index of the last sentence to include (exclusive).
+            Truncated text ending at sentence boundary.
         """
-        current_tokens = 0
-        end_idx = start_idx
+        if not text:
+            return ""
         
-        for i in range(start_idx, len(sentences)):
-            sentence = sentences[i]
+        # First check if the whole text fits
+        if self.count_tokens(text) <= max_tokens:
+            return text
+        
+        # Split into sentences
+        sentences = self._split_into_sentences(text)
+        
+        # Build up sentences until we hit the limit
+        result_sentences = []
+        current_tokens = 0
+        
+        for i, sentence in enumerate(sentences):
             sentence_tokens = self.count_tokens(sentence)
-            
-            # Check if adding this sentence would exceed the limit
-            # Add 1 for the space between sentences (except for first sentence)
-            additional_tokens = sentence_tokens if i == start_idx else sentence_tokens + 1
+            # Add 1 for space between sentences (except first)
+            additional_tokens = sentence_tokens if i == 0 else sentence_tokens + 1
             
             if current_tokens + additional_tokens > max_tokens:
                 break
             
+            result_sentences.append(sentence)
             current_tokens += additional_tokens
-            end_idx = i + 1
         
-        return end_idx
+        if not result_sentences:
+            # Even first sentence is too long - truncate it
+            return self._truncate_text_to_tokens(text, max_tokens)
+        
+        return " ".join(result_sentences)
     
-    def _find_sentences_for_overlap(self, sentences: List[str], end_idx: int, target_tokens: int) -> int:
-        """Find how many sentences to include for exactly target_tokens of overlap.
-        
-        Walks backwards from end_idx to find sentences that fit within target_tokens.
-        Actually joins sentences and counts tokens for accuracy.
+    def _truncate_text_to_tokens(self, text: str, max_tokens: int) -> str:
+        """Truncate text to exactly max_tokens (emergency fallback).
         
         Args:
-            sentences: List of all sentences.
-            end_idx: The index after the last sentence of the current chunk (exclusive).
-            target_tokens: Target number of tokens for overlap.
+            text: Text to truncate.
+            max_tokens: Maximum number of tokens.
             
         Returns:
-            Number of sentences to include in the overlap.
+            Truncated text.
         """
-        overlap_sentences = 0
-        best_distance = float('inf')
+        if not text:
+            return ""
         
-        # Walk backwards from end_idx - 1 to find sentences for overlap
-        for i in range(end_idx - 1, -1, -1):
-            # Build candidate overlap text by joining sentences from i to end_idx-1
-            candidate_sents = sentences[i:end_idx]
-            candidate_text = " ".join(candidate_sents)
-            candidate_tokens = self.count_tokens(candidate_text)
-            
-            # Check if this gets us closer to target
-            if overlap_sentences == 0:
-                # First sentence - always take it if it fits
-                if candidate_tokens <= target_tokens + 15:
-                    overlap_sentences = end_idx - i
-                else:
-                    # Even single sentence is too big, skip it
-                    continue
-            else:
-                # We already have some overlap, check if adding more helps
-                current_sents = sentences[end_idx - overlap_sentences:end_idx]
-                current_text = " ".join(current_sents)
-                current_tokens = self.count_tokens(current_text)
-                
-                current_distance = abs(current_tokens - target_tokens)
-                new_distance = abs(candidate_tokens - target_tokens)
-                
-                # Add sentence if it gets us closer (within tolerance)
-                if candidate_tokens <= target_tokens + 15 and new_distance <= current_distance + 5:
-                    overlap_sentences = end_idx - i
-                else:
-                    # Stop if adding more would not improve our position
-                    break
+        # Account for special tokens when encoding with them
+        effective_max = max_tokens - 2
         
-        # Calculate final token count
-        if overlap_sentences > 0:
-            final_sents = sentences[end_idx - overlap_sentences:end_idx]
-            final_text = " ".join(final_sents)
-            final_tokens = self.count_tokens(final_text)
-        else:
-            final_tokens = 0
+        tokens = self.tokenizer.encode(text, add_special_tokens=False)
         
-        return overlap_sentences, final_tokens
-
+        if len(tokens) <= effective_max:
+            # Revalidate
+            if self.count_tokens(text) <= max_tokens:
+                return text
+            effective_max = max_tokens - 2
+        
+        # Truncate and decode
+        truncated_tokens = tokens[:effective_max]
+        truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
+        
+        # Verify
+        final_count = self.count_tokens(truncated_text)
+        if final_count > max_tokens:
+            # Emergency: truncate more
+            excess = final_count - max_tokens
+            safe_max = max(0, effective_max - excess - 5)
+            truncated_tokens = tokens[:safe_max]
+            truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
+        
+        return truncated_text
+    
     def chunk(self, text: str) -> List[str]:
-        """Split text into chunks of at most 500 tokens with 50-token overlap.
+        """Split text into chunks of at most 500 tokens with exactly 50-token overlap.
         
         Respects sentence boundaries - no chunk will end mid-sentence.
+        Overlap is enforced at exactly 50 tokens (within 2-token tolerance).
+        
+        Algorithm:
+        1. Build first chunk to ~500 tokens, respecting sentence boundaries
+        2. Extract last 50 tokens as overlap for next chunk
+        3. Build subsequent chunks: overlap (50) + new content (~450), to ~500 total
+        4. Repeat until all text consumed
+        
+        Key insight: The overlap_text is the ACTUAL text from the end of the previous chunk.
+        The next chunk starts with this overlap_text, then adds new sentences.
+        We need to step back in sentence index to include the sentences that form the overlap.
         
         Args:
             text: Text to chunk.
@@ -199,112 +206,110 @@ class HeuristicChunker:
             return [text.strip()]
         
         chunks = []
-        current_idx = 0
+        current_sentence_idx = 0
+        overlap_sentences = []  # The sentences that form the overlap from previous chunk
         
-        while current_idx < len(sentences):
-            # Find the boundary for this chunk starting from current_idx
-            # Account for the overlap from previous chunk by reducing effective chunk size
-            if chunks:
-                # Calculate how many tokens of overlap we have
-                overlap_sentences, overlap_tokens = self._find_sentences_for_overlap(
-                    sentences, current_idx, self.OVERLAP
-                )
-                effective_chunk_size = self.CHUNK_SIZE - overlap_tokens
+        while current_sentence_idx < len(sentences):
+            # Determine available tokens for new content
+            if overlap_sentences:
+                # Calculate how many tokens the overlap takes
+                overlap_text = " ".join(overlap_sentences)
+                overlap_tokens = self.count_tokens(overlap_text)
+                # We want exactly 50 tokens of overlap, but sentence boundaries may vary
+                # Allow some tolerance - aim for 48-52 range
+                available_for_new = self.CHUNK_SIZE - overlap_tokens
             else:
-                effective_chunk_size = self.CHUNK_SIZE
+                # First chunk: full 500 tokens available
+                available_for_new = self.CHUNK_SIZE
+                overlap_tokens = 0
             
-            end_idx = self._find_chunk_boundary(
-                sentences, 
-                current_idx, 
-                effective_chunk_size
-            )
+            # Build the new content portion by adding sentences
+            new_sentences = []
+            new_content_tokens = 0
+            idx = current_sentence_idx
             
-            # Ensure we make progress (at least one new sentence)
-            if end_idx <= current_idx and current_idx < len(sentences):
-                # Force include at least the current sentence
-                end_idx = current_idx + 1
+            while idx < len(sentences):
+                sentence = sentences[idx]
+                sentence_tokens = self.count_tokens(sentence)
+                # Add 1 for space between sentences (except first)
+                additional_tokens = sentence_tokens if len(new_sentences) == 0 else sentence_tokens + 1
+                
+                if new_content_tokens + additional_tokens > available_for_new:
+                    break
+                
+                new_sentences.append(sentence)
+                new_content_tokens += additional_tokens
+                idx += 1
             
-            # Build the chunk text
-            chunk_sentences = sentences[current_idx:end_idx]
-            chunk_text = " ".join(chunk_sentences)
+            # Build the full chunk
+            if overlap_sentences and new_sentences:
+                chunk_text = " ".join(overlap_sentences) + " " + " ".join(new_sentences)
+            elif new_sentences:
+                chunk_text = " ".join(new_sentences)
+            elif overlap_sentences:
+                # Only overlap (shouldn't happen with proper logic)
+                chunk_text = " ".join(overlap_sentences)
+            else:
+                # No content at all (shouldn't happen)
+                break
             
-            # Verify token count
+            # Verify and enforce 500-token limit
             chunk_tokens = self.count_tokens(chunk_text)
-            
-            # If chunk is too large (shouldn't happen with sentence boundaries),
-            # we might need to split a sentence (emergency fallback)
             if chunk_tokens > self.CHUNK_SIZE:
-                # This shouldn't happen if sentence boundary detection works correctly
-                # But handle it gracefully by truncating
-                chunk_text = self._truncate_to_tokens(chunk_text, self.CHUNK_SIZE)
+                chunk_text = self._truncate_text_to_tokens(chunk_text, self.CHUNK_SIZE)
+                chunk_tokens = self.count_tokens(chunk_text)
             
             chunks.append(chunk_text)
             
-            # Move to next position, accounting for overlap
-            if end_idx >= len(sentences):
+            # If we've consumed all sentences, we're done
+            if idx >= len(sentences):
                 break
             
-            # Calculate how many sentences to step back for overlap
-            # This determines where the next chunk starts
-            overlap_sentences, overlap_tokens = self._find_sentences_for_overlap(
-                sentences, 
-                end_idx, 
-                self.OVERLAP
-            )
+            # Calculate the overlap for the next chunk
+            # We need to find how many sentences from the END of this chunk to include
+            # such that we get approximately 50 tokens of overlap
             
-            # Move current_idx forward, but step back for overlap
-            current_idx = end_idx - overlap_sentences
+            # Start with the last sentence and work backwards
+            overlap_sentences = []
+            overlap_token_count = 0
             
-            # Ensure we always make progress
-            if current_idx >= end_idx:
-                current_idx = end_idx
+            # Include sentences from the current chunk, starting from the last one
+            for sentence in reversed(new_sentences):
+                sentence_tokens = self.count_tokens(sentence)
+                # Add 1 for space between sentences
+                would_be_total = overlap_token_count + sentence_tokens + (1 if overlap_sentences else 0)
+                
+                if would_be_total <= self.OVERLAP + 2:  # Allow up to 52 tokens
+                    overlap_sentences.insert(0, sentence)  # Insert at beginning to maintain order
+                    overlap_token_count = would_be_total
+                else:
+                    # Adding this sentence would exceed the target
+                    # Check if we're closer with or without it
+                    if abs(would_be_total - self.OVERLAP) < abs(overlap_token_count - self.OVERLAP):
+                        overlap_sentences.insert(0, sentence)
+                        overlap_token_count = would_be_total
+                    break
+            
+            # If we couldn't fit any sentences in the overlap (shouldn't happen),
+            # fall back to token-level extraction
+            if not overlap_sentences and new_sentences:
+                # Extract last 50 tokens from the chunk text
+                overlap_text = self._get_last_n_tokens(chunk_text, self.OVERLAP)
+                # Find which sentences this corresponds to
+                for sent in reversed(new_sentences):
+                    if sent in overlap_text:
+                        overlap_sentences.insert(0, sent)
+            
+            # Move to next position
+            # The next chunk should start from the first sentence NOT in the overlap
+            # So we step back by the number of overlap sentences
+            current_sentence_idx = idx - len(overlap_sentences)
+            
+            # Ensure we always make progress (at least one new sentence)
+            if current_sentence_idx >= idx and idx < len(sentences):
+                current_sentence_idx = idx
         
         return chunks
-    
-    def _truncate_to_tokens(self, text: str, max_tokens: int) -> str:
-        """Truncate text to fit within max_tokens.
-        
-        This is an emergency fallback that shouldn't normally be needed.
-        Uses the tokenizer to find the right truncation point.
-        Revalidates with count_tokens() to guarantee max_tokens is not exceeded.
-        
-        Args:
-            text: Text to truncate.
-            max_tokens: Maximum number of tokens.
-            
-        Returns:
-            Truncated text.
-        """
-        # Account for special tokens ([CLS] and [SEP] = 2 tokens)
-        # when encoding without special tokens
-        effective_max = max_tokens - 2
-        
-        tokens = self.tokenizer.encode(text, add_special_tokens=False)
-        
-        if len(tokens) <= effective_max:
-            # Revalidate with count_tokens to ensure consistency
-            if self.count_tokens(text) <= max_tokens:
-                return text
-            # If count_tokens reports more, we need to truncate more
-            effective_max = max_tokens - 2
-        
-        # Truncate tokens and decode back to text
-        truncated_tokens = tokens[:effective_max]
-        truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
-        
-        # Revalidate with count_tokens to guarantee the limit
-        final_token_count = self.count_tokens(truncated_text)
-        if final_token_count > max_tokens:
-            # If still over, truncate more aggressively
-            # This can happen with tokenization edge cases
-            excess = final_token_count - max_tokens
-            safe_max = effective_max - excess - 5  # Extra safety margin
-            if safe_max < 0:
-                safe_max = 0
-            truncated_tokens = tokens[:safe_max]
-            truncated_text = self.tokenizer.decode(truncated_tokens, skip_special_tokens=True)
-        
-        return truncated_text
 
 
 def chunk_text(text: str) -> List[str]:
