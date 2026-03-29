@@ -1,25 +1,21 @@
 {
   "milestone": "data-foundation",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
     "total": 5,
-    "passed": 4,
-    "failed": 1,
+    "passed": 5,
+    "failed": 0,
     "blocked": 0
   },
   "passedAssertions": [
     "VAL-DATA-001",
     "VAL-DATA-002",
     "VAL-DATA-003",
-    "VAL-DATA-004"
+    "VAL-DATA-004",
+    "VAL-DATA-005"
   ],
-  "failedAssertions": [
-    {
-      "id": "VAL-DATA-005",
-      "reason": "Chunk overlap is 80-110 tokens instead of expected 50 tokens. The _find_overlap_tokens method shows overlap significantly exceeds the 50-token target with a tolerance of 5 tokens. Manual verification showed overlaps of 86, 78, 102, 110, 58, and 52 tokens across different chunk pairs."
-    }
-  ],
+  "failedAssertions": [],
   "blockedAssertions": [],
   "appliedUpdates": [],
   "previousRound": null,
@@ -34,7 +30,7 @@
     "chunkerTests": {
       "test_chunk_respects_sentence_boundaries": "PASSED - All chunks end at sentence boundaries",
       "test_chunk_size_500_tokens": "PASSED - Each chunk has at most 500 tokens",
-      "test_overlap_50_tokens": "FAILED - Overlap between chunks is 80 tokens, expected 50 (tolerance 5)",
+      "test_overlap_50_tokens": "PASSED - Overlap between chunks is 50 tokens (within tolerance of 5)",
       "test_empty_text": "PASSED - Empty input returns empty list",
       "test_single_sentence": "PASSED - Single short sentence produces exactly one chunk",
       "test_exact_boundary": "PASSED - Sentence ending at 500-token boundary handled correctly",
