@@ -91,3 +91,30 @@ Before testing:
 - **HDF5 persistence:** Test data survives container restarts
 - **CORS:** Must be properly configured for frontend to work
 - **Chunk count:** Expected 50-200 chunks depending on article sizes
+
+## Flow Validator Guidance: API Surface (curl)
+
+**Isolation:** Validators using curl can run concurrently without interference. Each request is independent.
+
+**Boundary:** Test against http://localhost:8000/ only. Do not access other ports.
+
+**Assertions to test:**
+- VAL-API-001: GET /status returns JSON with chunk_count and vector_dimensions
+- VAL-API-002: POST /query accepts JSON with query and optional k, returns results array
+- VAL-API-003: Default k=5 when not specified
+- VAL-API-004: CORS headers present in responses
+
+**Evidence collection:** Save curl output and response headers.
+
+## Flow Validator Guidance: Browser Surface (agent-browser)
+
+**Isolation:** Validators using agent-browser can run concurrently. Each browser session is independent.
+
+**Boundary:** Navigate to http://localhost:8000/ only. Do not access other ports or external sites.
+
+**Assertions to test:**
+- VAL-API-005: Frontend loads at root URL (index.html served)
+- VAL-API-006: Frontend can submit queries and display results
+- VAL-API-007: Frontend displays similarity scores with results
+
+**Evidence collection:** Take screenshots at key steps (page loaded, query submitted, results displayed).

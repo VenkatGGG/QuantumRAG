@@ -1,0 +1,79 @@
+{
+  "groupId": "api-assertions",
+  "testedAt": "2026-03-29T17:01:10Z",
+  "isolation": {
+    "apiBaseUrl": "http://localhost:8000/",
+    "port": 8000,
+    "authenticationRequired": false
+  },
+  "toolsUsed": ["curl"],
+  "assertions": [
+    {
+      "id": "VAL-API-001",
+      "title": "Status endpoint returns correct data",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "GET /status",
+          "expected": "JSON with chunk_count and vector_dimensions fields",
+          "observed": "JSON response with chunk_count: 204 and vector_dimensions: 384"
+        }
+      ],
+      "evidence": {
+        "curlOutput": "api-frontend/api-assertions/VAL-API-001-status-output.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-API-002",
+      "title": "Query endpoint accepts and processes requests",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST /query with query field",
+          "expected": "JSON with results array containing text and similarity fields",
+          "observed": "Response with 5 results, each containing text and similarity fields"
+        }
+      ],
+      "evidence": {
+        "curlOutput": "api-frontend/api-assertions/VAL-API-002-query-output.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-API-003",
+      "title": "Query endpoint default k value",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST /query without specifying k",
+          "expected": "Returns 5 results by default",
+          "observed": "Response contains exactly 5 results"
+        }
+      ],
+      "evidence": {
+        "curlOutput": "api-frontend/api-assertions/VAL-API-003-default-k-output.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-API-004",
+      "title": "CORS headers are present",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "GET /status with Origin header",
+          "expected": "Response includes Access-Control-Allow-Origin header",
+          "observed": "Response headers show access-control-allow-origin: http://localhost:3000 and access-control-allow-credentials: true"
+        }
+      ],
+      "evidence": {
+        "curlOutput": "api-frontend/api-assertions/VAL-API-004-cors-headers.txt"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 4 assertions: 4 passed, 0 failed, 0 blocked"
+}

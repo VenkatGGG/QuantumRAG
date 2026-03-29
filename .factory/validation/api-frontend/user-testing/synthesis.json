@@ -1,0 +1,39 @@
+{
+  "milestone": "api-frontend",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 7,
+    "passed": 7,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-API-001",
+    "VAL-API-002",
+    "VAL-API-003",
+    "VAL-API-004",
+    "VAL-API-005",
+    "VAL-API-006",
+    "VAL-API-007"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "flowReports": [
+    ".factory/validation/api-frontend/user-testing/flows/api-assertions.json",
+    ".factory/validation/api-frontend/user-testing/flows/browser-assertions.json"
+  ],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added Flow Validator Guidance sections for API Surface (curl) and Browser Surface (agent-browser)",
+      "source": "setup"
+    },
+    {
+      "target": "scripts/run_full_pipeline.py",
+      "description": "Created pipeline script to scrape, chunk, embed, and save to HDF5",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}

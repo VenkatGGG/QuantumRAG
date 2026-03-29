@@ -1,0 +1,74 @@
+{
+  "groupId": "browser-assertions",
+  "testedAt": "2026-03-29T00:00:00Z",
+  "isolation": {
+    "frontendUrl": "http://localhost:8000/",
+    "port": 8000,
+    "browserSession": "36181bf44ed3__b1"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-API-005",
+      "title": "Frontend loads successfully",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8000/",
+          "expected": "Chat interface HTML loads",
+          "observed": "RAG Query Interface loaded successfully with heading, query input, and search button"
+        }
+      ],
+      "evidence": {
+        "screenshots": ["api-frontend/browser-assertions/VAL-API-005-frontend-loaded.png"],
+        "consoleErrors": "none",
+        "network": "GET / -> 200, page loaded successfully"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-API-006",
+      "title": "Frontend can submit queries",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Type query 'quantum key distribution' in input field",
+          "expected": "Query text appears in input",
+          "observed": "Input field populated with query text"
+        },
+        {
+          "action": "Click Search button",
+          "expected": "Query sent to backend and results displayed",
+          "observed": "Results section appeared with 5 result items showing text content"
+        }
+      ],
+      "evidence": {
+        "screenshots": ["api-frontend/browser-assertions/VAL-API-006-query-submitted.png"],
+        "consoleErrors": "none",
+        "network": "POST /query request made, 5 results returned"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-API-007",
+      "title": "Frontend displays similarity scores",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Verify results display after query submission",
+          "expected": "Each result shows text content and similarity score",
+          "observed": "All 5 results display text content with percentage match scores: #1 69.2%, #2 67.5%, #3 66.9%, #4 63.8%, #5 62.7%"
+        }
+      ],
+      "evidence": {
+        "screenshots": ["api-frontend/browser-assertions/VAL-API-007-similarity-scores.png"],
+        "consoleErrors": "none",
+        "network": "Results from /query endpoint contain text and similarity fields"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 3 assertions: 3 passed, 0 failed, 0 blocked. All browser surface assertions for the api-frontend milestone completed successfully. The frontend loads correctly, accepts queries, communicates with the backend, and displays results with similarity scores as specified."
+}
