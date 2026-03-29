@@ -130,6 +130,7 @@ class HeuristicChunker:
             Number of sentences to include in the overlap.
         """
         overlap_sentences = 0
+        best_distance = float('inf')
         
         # Walk backwards from end_idx - 1 to find sentences for overlap
         for i in range(end_idx - 1, -1, -1):
