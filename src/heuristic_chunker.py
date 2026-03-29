@@ -119,7 +119,7 @@ class HeuristicChunker:
         """Find how many sentences to include for exactly target_tokens of overlap.
         
         Walks backwards from end_idx to find sentences that fit within target_tokens.
-        Allows slight overflow (up to 5 tokens) to get closer to the target.
+        Actually joins sentences and counts tokens for accuracy.
         
         Args:
             sentences: List of all sentences.
@@ -129,25 +129,48 @@ class HeuristicChunker:
         Returns:
             Number of sentences to include in the overlap.
         """
-        overlap_tokens = 0
         overlap_sentences = 0
         
         # Walk backwards from end_idx - 1 to find sentences for overlap
         for i in range(end_idx - 1, -1, -1):
-            sentence_tokens = self.count_tokens(sentences[i])
-            # Skip sentences larger than the overlap limit
-            if sentence_tokens > target_tokens:
-                continue
-            # Count tokens for this sentence (no separator for first/only sentence)
-            separator = 1 if overlap_sentences > 0 else 0
-            new_total = overlap_tokens + sentence_tokens + separator
-            # Allow up to 5 tokens over the target to get closer to desired overlap
-            if new_total > target_tokens + 5:
-                break
-            overlap_tokens += sentence_tokens + separator
-            overlap_sentences += 1
+            # Build candidate overlap text by joining sentences from i to end_idx-1
+            candidate_sents = sentences[i:end_idx]
+            candidate_text = " ".join(candidate_sents)
+            candidate_tokens = self.count_tokens(candidate_text)
+            
+            # Check if this gets us closer to target
+            if overlap_sentences == 0:
+                # First sentence - always take it if it fits
+                if candidate_tokens <= target_tokens + 15:
+                    overlap_sentences = end_idx - i
+                else:
+                    # Even single sentence is too big, skip it
+                    continue
+            else:
+                # We already have some overlap, check if adding more helps
+                current_sents = sentences[end_idx - overlap_sentences:end_idx]
+                current_text = " ".join(current_sents)
+                current_tokens = self.count_tokens(current_text)
+                
+                current_distance = abs(current_tokens - target_tokens)
+                new_distance = abs(candidate_tokens - target_tokens)
+                
+                # Add sentence if it gets us closer (within tolerance)
+                if candidate_tokens <= target_tokens + 15 and new_distance <= current_distance + 5:
+                    overlap_sentences = end_idx - i
+                else:
+                    # Stop if adding more would not improve our position
+                    break
         
-        return overlap_sentences, overlap_tokens
+        # Calculate final token count
+        if overlap_sentences > 0:
+            final_sents = sentences[end_idx - overlap_sentences:end_idx]
+            final_text = " ".join(final_sents)
+            final_tokens = self.count_tokens(final_text)
+        else:
+            final_tokens = 0
+        
+        return overlap_sentences, final_tokens
 
     def chunk(self, text: str) -> List[str]:
         """Split text into chunks of at most 500 tokens with 50-token overlap.
