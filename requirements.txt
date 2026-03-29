@@ -1,0 +1,9 @@
+wikipedia-api
+httpx
+transformers
+torch
+numpy
+fastapi
+uvicorn
+h5py
+pytest

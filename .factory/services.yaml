@@ -1,0 +1,18 @@
+commands:
+  install: pip install -r requirements.txt
+  typecheck: echo "No typecheck configured for Python"
+  build: echo "No build step required"
+  test: python -m pytest tests/ -v
+  lint: echo "No linter configured"
+  test-math: python -m pytest test_suite.py -v
+  start: uvicorn src.main:app --host 0.0.0.0 --port 8000
+  scrape: python scripts/scrape_articles.py
+  pipeline: python scripts/run_full_pipeline.py
+
+services:
+  api:
+    start: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    stop: lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+    healthcheck: curl -sf http://localhost:8000/status
+    port: 8000
+    depends_on: []

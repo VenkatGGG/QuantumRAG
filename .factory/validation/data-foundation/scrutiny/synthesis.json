@@ -1,0 +1,67 @@
+{
+  "milestone": "data-foundation",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "python -m pytest tests/ --tb=short -q",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "echo 'No typecheck configured for Python'",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "echo 'No linter configured'",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "src/wikipedia_scraper.py",
+      "description": "Fixed import from requests to httpx to match available dependencies",
+      "sourceFeature": "scrutiny-validator-data-foundation"
+    },
+    {
+      "target": "tests/test_scraper.py",
+      "description": "Fixed mock patch to use httpx.get instead of requests.get",
+      "sourceFeature": "scrutiny-validator-data-foundation"
+    },
+    {
+      "target": "tests/test_scraper.py",
+      "description": "Fixed rate limiting test to call _apply_rate_limit() twice to test actual delay",
+      "sourceFeature": "scrutiny-validator-data-foundation"
+    },
+    {
+      "target": "src/heuristic_chunker.py",
+      "description": "Fixed overlap calculation to only include new content (from current_idx to end_idx) in overlap, not the overlap portion from previous chunk",
+      "sourceFeature": "scrutiny-validator-data-foundation"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add convention: When 'exactly' is specified in requirements (e.g., 'exactly 50 tokens'), tests should use strict equality, not tolerance. The test_overlap_50_tokens test used abs(overlap - 50) <= 5 which masked the bug.",
+      "evidence": "tests/test_chunker.py line 61: assert abs(overlap_tokens - 50) <= 5 - this tolerance allowed the overlap bug to pass initial validation",
+      "isSystemic": false
+    },
+    {
+      "target": "skills/data-worker",
+      "suggestion": "Update skill to acknowledge that httpx is a valid alternative to wikipedia-api when timeout issues occur. The worker made a justified deviation switching to httpx due to wikipedia-api search timeouts.",
+      "evidence": "scrape-wikipedia-articles feature: Worker switched from wikipedia-api to httpx due to timeout issues, but maintained all functional requirements",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
