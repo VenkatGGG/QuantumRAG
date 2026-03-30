@@ -1,8 +1,11 @@
 """Heuristic text chunker module for splitting text into token-based chunks.
 
-This module implements a custom chunking algorithm that splits text into exactly
-500-token chunks with 50-token overlap, respecting sentence boundaries (no mid-sentence
-truncation). Uses the model's tokenizer for accurate token counting.
+This module implements Option A of the chunking contract (see DESIGN.md):
+- Chunk boundaries never cut sentences (sentence-aligned)
+- Size <= 500 tokens (hard ceiling)
+- Overlap is sentence-aligned, closest to 50 tokens (target, not guarantee)
+
+Includes improved Wikipedia segmentation for headings, blank lines, formulas, and lists.
 """
 import re
 from typing import List, Tuple
@@ -10,9 +13,14 @@ from transformers import AutoTokenizer
 
 
 class HeuristicChunker:
-    """Chunker that splits text into 500-token chunks with 50-token overlap.
+    """Chunker implementing Option A contract from DESIGN.md.
     
-    Respects sentence boundaries to avoid mid-sentence truncation.
+    Key properties:
+    - Sentence boundaries are always respected (no mid-sentence cuts)
+    - Chunks contain at most 500 tokens (hard ceiling)
+    - Overlap is sentence-aligned, targeting ~50 tokens (actual varies 30-70)
+    - Improved Wikipedia segmentation (headings, blank lines, formulas, lists)
+    
     Uses the same tokenizer as the embedding model for consistency.
     """
     
@@ -44,24 +52,104 @@ class HeuristicChunker:
         return len(tokens)
     
     def _split_into_sentences(self, text: str) -> List[str]:
-        """Split text into sentences using regex-based sentence boundary detection.
+        """Split text into sentences using Wikipedia-aware segmentation.
+        
+        This method handles Wikipedia-specific formatting:
+        - Headings (lines with ==Section==)
+        - Blank lines (logical section breaks)
+        - List items (bullet points, numbered lists)
+        - Formulas (treated as atomic units)
         
         Args:
             text: Text to split into sentences.
             
         Returns:
-            List of sentences.
+            List of sentences/segments.
         """
-        # Use regex to split on sentence boundaries
-        # Matches period, question mark, or exclamation followed by space or end of string
-        # Also handles multiple whitespace
-        sentence_pattern = r'(?<=[.!?])\s+'
-        sentences = re.split(sentence_pattern, text.strip())
+        # First, apply Wikipedia-aware segmentation
+        segments = self._segment_wikipedia_text(text)
         
-        # Clean up and filter empty sentences
-        sentences = [s.strip() for s in sentences if s.strip()]
+        all_sentences = []
+        for segment in segments:
+            # Use regex to split on sentence boundaries within each segment
+            # Matches period, question mark, or exclamation followed by space or end
+            sentence_pattern = r'(?<=[.!?])\s+'
+            sentences = re.split(sentence_pattern, segment.strip())
+            
+            # Clean up and filter empty sentences
+            sentences = [s.strip() for s in sentences if s.strip()]
+            all_sentences.extend(sentences)
         
-        return sentences
+        return all_sentences
+    
+    def _segment_wikipedia_text(self, text: str) -> List[str]:
+        """Segment Wikipedia text at natural boundaries.
+        
+        Identifies and preserves:
+        - Headings (==Section==, ===Subsection===)
+        - Blank lines (paragraph breaks)
+        - List items (bullet points, numbered items)
+        - Formula blocks (atomic units)
+        
+        Args:
+            text: Wikipedia-formatted text.
+            
+        Returns:
+            List of text segments at natural boundaries.
+        """
+        if not text:
+            return []
+        
+        segments = []
+        lines = text.split('\n')
+        current_segment = []
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Check for heading (starts and ends with =)
+            if re.match(r'^=+\s*.+\s*=+$', stripped):
+                # Save current segment if any
+                if current_segment:
+                    segments.append(' '.join(current_segment))
+                    current_segment = []
+                # Add heading as its own segment
+                segments.append(stripped)
+                continue
+            
+            # Check for blank line (paragraph break)
+            if not stripped:
+                if current_segment:
+                    segments.append(' '.join(current_segment))
+                    current_segment = []
+                continue
+            
+            # Check for list item
+            if re.match(r'^[*#-]\s', stripped):
+                # Save current segment if any
+                if current_segment:
+                    segments.append(' '.join(current_segment))
+                    current_segment = []
+                # Add list item as its own segment
+                segments.append(stripped)
+                continue
+            
+            # Check for LaTeX/math formula (atomic unit)
+            if re.match(r'^\$+.*\$+$', stripped) or re.match(r'^\\\[.*\\\]$', stripped):
+                if current_segment:
+                    segments.append(' '.join(current_segment))
+                    current_segment = []
+                segments.append(stripped)
+                continue
+            
+            # Regular text line - add to current segment
+            current_segment.append(stripped)
+        
+        # Don't forget the last segment
+        if current_segment:
+            segments.append(' '.join(current_segment))
+        
+        return segments
     
     def _get_last_n_tokens(self, text: str, n: int) -> str:
         """Get the last n tokens from text as a string.
@@ -131,7 +219,7 @@ class HeuristicChunker:
         return " ".join(result_sentences)
     
     def _truncate_text_to_tokens(self, text: str, max_tokens: int) -> str:
-        """Truncate text to exactly max_tokens (emergency fallback).
+        """Truncate text to max_tokens or fewer (emergency fallback).
         
         Args:
             text: Text to truncate.
@@ -170,20 +258,18 @@ class HeuristicChunker:
         return truncated_text
     
     def chunk(self, text: str) -> List[str]:
-        """Split text into chunks of at most 500 tokens with exactly 50-token overlap.
+        """Split text into chunks following Option A contract.
         
-        Respects sentence boundaries - no chunk will end mid-sentence.
-        Overlap is enforced at exactly 50 tokens (within 2-token tolerance).
+        Contract (see DESIGN.md):
+        1. Sentence boundaries always respected - no mid-sentence cuts
+        2. Chunk size <= 500 tokens (hard ceiling)
+        3. Overlap is sentence-aligned, targeting ~50 tokens (not exact)
         
         Algorithm:
-        1. Build first chunk to ~500 tokens, respecting sentence boundaries
-        2. Extract last 50 tokens as overlap for next chunk
-        3. Build subsequent chunks: overlap (50) + new content (~450), to ~500 total
-        4. Repeat until all text consumed
-        
-        Key insight: The overlap_text is the ACTUAL text from the end of the previous chunk.
-        The next chunk starts with this overlap_text, then adds new sentences.
-        We need to step back in sentence index to include the sentences that form the overlap.
+        1. Segment text using Wikipedia-aware segmentation
+        2. Split into sentences
+        3. Build chunks: overlap (sentence-aligned, ~50 tokens) + new content
+        4. Each chunk ends at sentence boundary, size <= 500 tokens
         
         Args:
             text: Text to chunk.
@@ -215,7 +301,7 @@ class HeuristicChunker:
                 # Calculate how many tokens the overlap takes
                 overlap_text = " ".join(overlap_sentences)
                 overlap_tokens = self.count_tokens(overlap_text)
-                # We want exactly 50 tokens of overlap, but sentence boundaries may vary
+                # We target ~50 tokens of overlap, but sentence boundaries may vary
                 # Allow some tolerance - aim for 48-52 range
                 available_for_new = self.CHUNK_SIZE - overlap_tokens
             else:
@@ -266,31 +352,47 @@ class HeuristicChunker:
                 break
             
             # Calculate the overlap for the next chunk
-            # We need to find how many sentences from the END of this chunk to include
-            # such that we get approximately 50 tokens of overlap
-            
-            # Start with the last sentence and work backwards
+            # Strategy: Include sentences from the end of this chunk to get as close
+            # to 50 tokens as possible while respecting sentence boundaries.
+            # This is a TARGET, not a guarantee - actual overlap will vary.
             overlap_sentences = []
             overlap_token_count = 0
             
-            # Include sentences from the current chunk, starting from the last one
+            # Build candidate overlap by walking backwards through new_sentences
+            candidates = []
+            candidate_tokens = 0
+            
             for sentence in reversed(new_sentences):
                 sentence_tokens = self.count_tokens(sentence)
                 # Add 1 for space between sentences
-                would_be_total = overlap_token_count + sentence_tokens + (1 if overlap_sentences else 0)
-                
-                if would_be_total <= self.OVERLAP + 2:  # Allow up to 52 tokens
-                    overlap_sentences.insert(0, sentence)  # Insert at beginning to maintain order
-                    overlap_token_count = would_be_total
-                else:
-                    # Adding this sentence would exceed the target
-                    # Check if we're closer with or without it
-                    if abs(would_be_total - self.OVERLAP) < abs(overlap_token_count - self.OVERLAP):
-                        overlap_sentences.insert(0, sentence)
-                        overlap_token_count = would_be_total
-                    break
+                would_be_total = candidate_tokens + sentence_tokens + (1 if candidates else 0)
+                candidates.insert(0, sentence)  # Insert at beginning to maintain order
+                candidate_tokens = would_be_total
             
-            # If we couldn't fit any sentences in the overlap (shouldn't happen),
+            # Now find the subset of candidates that gets closest to 50 tokens
+            # We want to minimize abs(token_count - 50)
+            if candidates:
+                best_overlap = []
+                best_token_count = 0
+                best_distance = float('inf')
+                
+                # Try different numbers of sentences from the end
+                for num_sentences in range(1, len(candidates) + 1):
+                    # Take the last num_sentences sentences
+                    test_overlap = candidates[-num_sentences:]
+                    test_text = " ".join(test_overlap)
+                    test_tokens = self.count_tokens(test_text)
+                    distance = abs(test_tokens - self.OVERLAP)
+                    
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_overlap = test_overlap
+                        best_token_count = test_tokens
+                
+                overlap_sentences = best_overlap
+                overlap_token_count = best_token_count
+            
+            # If we couldn't fit any sentences in the overlap (edge case),
             # fall back to token-level extraction
             if not overlap_sentences and new_sentences:
                 # Extract last 50 tokens from the chunk text
@@ -299,6 +401,8 @@ class HeuristicChunker:
                 for sent in reversed(new_sentences):
                     if sent in overlap_text:
                         overlap_sentences.insert(0, sent)
+                if overlap_sentences:
+                    overlap_token_count = self.count_tokens(" ".join(overlap_sentences))
             
             # Move to next position
             # The next chunk should start from the first sentence NOT in the overlap

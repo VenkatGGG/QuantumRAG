@@ -35,7 +35,7 @@ The RAG application consists of four main components:
 
 ### Ingestion Flow
 1. **Scraper** fetches 10 Wikipedia articles about Quantum Cryptography
-2. **Chunker** splits articles into 500-token chunks with 50-token overlap
+2. **Chunker** splits articles into 500-token chunks with sentence-aligned overlap closest to 50 tokens
 3. **Embedding Pipeline** generates 384-dimensional vectors for each chunk
 4. **Vector Store** saves vectors and texts to HDF5 file
 
@@ -50,7 +50,7 @@ The RAG application consists of four main components:
 
 1. **Sentence Boundaries**: No chunk may end mid-sentence
 2. **Token Count**: Chunks contain at most 500 tokens
-3. **Overlap**: Consecutive chunks share exactly 50 tokens
+3. **Overlap**: Consecutive chunks share sentence-aligned overlap closest to 50 tokens (target, not guarantee)
 4. **Embedding Dimension**: All vectors are exactly 384-dimensional
 5. **Deterministic Output**: Same input always produces same embedding
 6. **Persistence**: Vector store survives container restarts

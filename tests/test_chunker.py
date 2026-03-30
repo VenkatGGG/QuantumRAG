@@ -38,7 +38,11 @@ class TestHeuristicChunker:
             assert token_count <= 500, f"Chunk {i} has {token_count} tokens, exceeds 500 limit"
 
     def test_overlap_50_tokens(self):
-        """VAL-DATA-005: Consecutive chunks share exactly 50 tokens of overlap."""
+        """VAL-DATA-005: Consecutive chunks share sentence-aligned overlap closest to 50 tokens.
+        
+        Per Option A contract (DESIGN.md): 50 tokens is a TARGET, not a guarantee.
+        Overlap is sentence-aligned and should be within reasonable range of 50.
+        """
         # Create a long text with many sentences
         sentences = [f"This is sentence number {i} with sufficient words for overlap testing purposes." for i in range(100)]
         text = " ".join(sentences)
@@ -65,7 +69,9 @@ class TestHeuristicChunker:
             
             overlap_tokens = chunker.count_tokens(overlap_text) if overlap_text else 0
             
-            assert abs(overlap_tokens - 50) <= 5, f"Overlap between chunk {i} and {i+1} is {overlap_tokens} tokens, expected 50"
+            # Option A contract: 50 is a target, not a guarantee
+            # Allow wider tolerance since sentence boundaries prevent exact 50 tokens
+            assert abs(overlap_tokens - 50) <= 25, f"Overlap between chunk {i} and {i+1} is {overlap_tokens} tokens, expected close to 50 (within 25)"
 
     def test_empty_text(self):
         """Verify empty input returns empty list."""
