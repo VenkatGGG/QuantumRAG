@@ -44,6 +44,3 @@ README.md
 
 # Factory directory (mission infrastructure, not needed in container)
 .factory/
-
-# Scripts (not needed in container - app runs via CMD)
-scripts/

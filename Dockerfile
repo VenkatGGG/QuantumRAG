@@ -24,6 +24,17 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+# Set Hugging Face cache to a location within the app directory so it persists in the image
+ENV HF_HOME=/app/.cache/huggingface
+
+# Pre-download Hugging Face model during build
+# This prevents runtime download on first query and eliminates HF Hub warnings
+COPY scripts/download_model.py ./scripts/download_model.py
+RUN python scripts/download_model.py
+
 # Copy application code
 COPY src/ ./src/
 COPY static/ ./static/
@@ -35,9 +46,8 @@ RUN mkdir -p /app/data
 # Expose port 8000
 EXPOSE 8000
 
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
+# Disable HF Hub network requests at runtime - model is already cached
+ENV HF_HUB_OFFLINE=1
 
 # Command to run the FastAPI application
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
