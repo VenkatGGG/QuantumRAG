@@ -1,8 +1,6 @@
 # Docker Compose configuration for RAG Application
 # Builds from Dockerfile and exposes port 8000 with volume mount for HDF5 persistence
 
-version: '3.8'
-
 services:
   api:
     build:
