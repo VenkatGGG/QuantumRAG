@@ -72,8 +72,7 @@ class EmbeddingPipeline:
     
     def __init__(self):
         """Initialize the embedding pipeline with model and tokenizer."""
-        # Load model and tokenizer locally
-        # This downloads the model on first run (~80MB) and caches it
+        # Load model and tokenizer locally from cache
         self.tokenizer = AutoTokenizer.from_pretrained(self.MODEL_NAME)
         self.model = AutoModel.from_pretrained(self.MODEL_NAME)
         
@@ -120,7 +119,7 @@ class EmbeddingPipeline:
         pooled = mean_pooling(last_hidden_state, attention_mask)
         
         # Convert to numpy and return single vector (remove batch dimension)
-        embedding = pooled.squeeze(0).numpy()
+        embedding = pooled.squeeze(0).detach().cpu().numpy()
         
         return embedding
     
@@ -158,6 +157,6 @@ class EmbeddingPipeline:
         pooled = mean_pooling(last_hidden_state, attention_mask)
         
         # Convert to numpy
-        embeddings = pooled.numpy()
+        embeddings = pooled.detach().cpu().numpy()
         
         return embeddings
