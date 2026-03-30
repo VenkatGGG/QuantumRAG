@@ -10,8 +10,8 @@ from transformers import AutoModel, AutoTokenizer
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Use the cache location set in Dockerfile
-HF_HOME = os.environ.get("HF_HOME", "/app/.cache/huggingface")
+# Use the cache location set in Dockerfile, or fall back to local cache
+HF_HOME = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
 os.makedirs(HF_HOME, exist_ok=True)
 
 print(f"Pre-downloading model: {MODEL_NAME}")
@@ -19,6 +19,8 @@ print(f"Cache location: {HF_HOME}")
 print("This may take a few minutes...")
 
 # Download both tokenizer and model
+# Use local_files_only=False to allow download during build
+# Do NOT use cache_dir parameter - rely on HF_HOME environment variable
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModel.from_pretrained(MODEL_NAME)
 

@@ -29,6 +29,8 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 # Set Hugging Face cache to a location within the app directory so it persists in the image
 ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
+ENV HUGGINGFACE_HUB_CACHE=/app/.cache/huggingface/hub
 
 # Pre-download Hugging Face model during build
 # This prevents runtime download on first query and eliminates HF Hub warnings
