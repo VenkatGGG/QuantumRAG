@@ -9,6 +9,7 @@ This module implements the FastAPI backend with:
 """
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel
@@ -19,22 +20,6 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from src.vector_store import VectorStore
 from src.embedding import EmbeddingPipeline
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="RAG Query API",
-    description="Retrieval-Augmented Generation API for querying Wikipedia articles about Quantum Cryptography",
-    version="1.0.0"
-)
-
-# Configure CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-)
 
 # Initialize global instances
 vector_store: VectorStore = VectorStore(dimension=384)
@@ -78,11 +63,31 @@ def init_embedding_pipeline() -> None:
         print("Embedding pipeline ready")
 
 
-# Load vector store on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup: Load vector store
     load_vector_store()
+    yield
+    # Shutdown: (optional cleanup could go here)
+
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(
+    title="RAG Query API",
+    description="Retrieval-Augmented Generation API for querying Wikipedia articles about Quantum Cryptography",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configure CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 
 # Request/Response models
