@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAG Query Interface</title>
+    <title>Quantum Cryptography RAG Chat</title>
     <style>
         * {
             margin: 0;
@@ -13,426 +13,664 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
-            padding: 20px;
+            display: flex;
+            flex-direction: column;
         }
 
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            color: white;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-
-        .status-bar {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             padding: 15px 20px;
-            margin-bottom: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 .icon {
+            font-size: 1.5rem;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
         }
 
         .status-item {
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-
-        .status-label {
-            font-size: 0.9rem;
-            color: #666;
-        }
-
-        .status-value {
-            font-weight: bold;
-            color: #333;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
         }
 
         .status-indicator {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: #4CAF50;
-            display: inline-block;
         }
 
-        .query-box {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            padding: 30px;
+        .status-indicator.disconnected {
+            background: #f44336;
+        }
+
+        .status-indicator.connecting {
+            background: #FF9800;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .welcome-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .welcome-message h2 {
+            color: white;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+
+        .welcome-message p {
             margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            line-height: 1.6;
         }
 
-        .query-input-group {
+        .example-queries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .example-query {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .example-query:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .message-content {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 18px;
+            padding: 12px 16px;
+            color: white;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: rgba(255, 255, 255, 0.1);
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 4px;
+            text-align: right;
+        }
+
+        .message.assistant .message-time {
+            text-align: left;
+        }
+
+        /* Retrieved context styling */
+        .retrieved-context {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .context-header {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .context-snippets {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .context-snippet {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.85);
+            border-left: 3px solid #11998e;
+        }
+
+        .snippet-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            font-size: 0.75rem;
+        }
+
+        .snippet-rank {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .snippet-similarity {
+            background: rgba(17, 153, 142, 0.3);
+            color: #38ef7d;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .snippet-similarity.medium {
+            background: rgba(255, 152, 0, 0.3);
+            color: #FFB74D;
+        }
+
+        .snippet-similarity.low {
+            background: rgba(244, 67, 54, 0.3);
+            color: #EF5350;
+        }
+
+        .input-container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px 20px;
+        }
+
+        .input-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
             display: flex;
             gap: 10px;
-            margin-bottom: 15px;
+            align-items: flex-end;
         }
 
-        #queryInput {
+        .message-input {
             flex: 1;
-            padding: 15px 20px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 24px;
+            padding: 12px 20px;
+            color: white;
             font-size: 1rem;
-            transition: border-color 0.3s;
+            font-family: inherit;
+            resize: none;
+            min-height: 48px;
+            max-height: 150px;
+            outline: none;
+            transition: border-color 0.2s;
         }
 
-        #queryInput:focus {
-            outline: none;
+        .message-input:focus {
             border-color: #667eea;
         }
 
-        #kInput {
-            width: 80px;
-            padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1rem;
-            text-align: center;
+        .message-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
         }
 
-        #submitBtn {
-            padding: 15px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        #submitBtn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        #submitBtn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .results-container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            min-height: 200px;
-        }
-
-        .results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .results-title {
-            font-size: 1.3rem;
-            color: #333;
-        }
-
-        .results-count {
-            background: #667eea;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-        }
-
-        .result-item {
-            background: #f8f9fa;
-            border-left: 4px solid #667eea;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 15px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .result-item:hover {
-            transform: translateX(5px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .result-text {
-            color: #444;
-            line-height: 1.6;
-            margin-bottom: 10px;
-        }
-
-        .result-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .similarity-badge {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: bold;
-        }
-
-        .similarity-badge.medium {
-            background: linear-gradient(135deg, #FF9800 0%, #f57c00 100%);
-        }
-
-        .similarity-badge.low {
-            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-        }
-
-        .result-rank {
-            color: #999;
-            font-size: 0.9rem;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
+        .send-button {
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .send-button:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
-        .empty-state-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            align-items: center;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
         }
 
         .error-message {
-            background: #ffebee;
-            border: 1px solid #f44336;
-            color: #c62828;
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.4);
+            color: #FFCDD2;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-top: 10px;
+            font-size: 0.9rem;
         }
 
         .footer {
             text-align: center;
-            margin-top: 30px;
-            color: rgba(255,255,255,0.8);
-            font-size: 0.9rem;
+            padding: 10px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔍 RAG Query Interface</h1>
-
+    <div class="header">
+        <h1>
+            <span class="icon">🔐</span>
+            Quantum Cryptography RAG
+        </h1>
         <div class="status-bar">
             <div class="status-item">
-                <span class="status-indicator"></span>
-                <span class="status-label">API Status:</span>
-                <span class="status-value" id="apiStatus">Checking...</span>
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
             </div>
             <div class="status-item">
-                <span class="status-label">Chunks:</span>
-                <span class="status-value" id="chunkCount">-</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Dimensions:</span>
-                <span class="status-value" id="vectorDimensions">-</span>
+                <span>Chunks:</span>
+                <span id="chunkCount">-</span>
             </div>
         </div>
+    </div>
 
-        <div class="query-box">
-            <div class="query-input-group">
-                <input 
-                    type="text" 
-                    id="queryInput" 
-                    placeholder="Enter your query about quantum cryptography..."
-                    autocomplete="off"
-                >
-                <input 
-                    type="number" 
-                    id="kInput" 
-                    value="5" 
-                    min="1" 
-                    max="20"
-                    title="Number of results"
-                >
-                <button id="submitBtn" onclick="submitQuery()">Search</button>
+    <div class="chat-container" id="chatContainer">
+        <div class="welcome-message" id="welcomeMessage">
+            <h2>Welcome to the Quantum Cryptography Assistant</h2>
+            <p>Ask me anything about quantum cryptography, quantum key distribution,<br>post-quantum cryptography, or related topics.</p>
+            <div class="example-queries">
+                <button class="example-query" onclick="setQuery('What is quantum key distribution?')">What is quantum key distribution?</button>
+                <button class="example-query" onclick="setQuery('How does BB84 protocol work?')">How does BB84 protocol work?</button>
+                <button class="example-query" onclick="setQuery('What is quantum entanglement?')">What is quantum entanglement?</button>
             </div>
         </div>
+    </div>
 
-        <div class="results-container">
-            <div class="results-header">
-                <h2 class="results-title">Results</h2>
-                <span class="results-count" id="resultsCount" style="display: none;">0</span>
-            </div>
-            <div id="resultsContent">
-                <div class="empty-state">
-                    <div class="empty-state-icon">📚</div>
-                    <p>Enter a query above to search through the knowledge base</p>
-                </div>
-            </div>
+    <div class="input-container">
+        <div class="input-wrapper">
+            <textarea 
+                class="message-input" 
+                id="messageInput" 
+                placeholder="Type your question about quantum cryptography..."
+                rows="1"
+            ></textarea>
+            <button class="send-button" id="sendButton" onclick="sendMessage()">
+                ➤
+            </button>
         </div>
-
         <div class="footer">
-            <p>Powered by Local RAG • No external APIs • Pure NumPy & Transformers</p>
+            Powered by Local RAG • No external APIs • Pure NumPy & Transformers
         </div>
     </div>
 
     <script>
         const API_BASE_URL = window.location.origin;
-        
-        // Check status on page load
+        let isProcessing = false;
+        let conversationHistory = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+            setupInputHandling();
+        });
+
+        // Check API status
         async function checkStatus() {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const chunkCount = document.getElementById('chunkCount');
+
+            indicator.className = 'status-indicator connecting';
+            statusText.textContent = 'Connecting...';
+
             try {
                 const response = await fetch(`${API_BASE_URL}/status`);
                 if (response.ok) {
                     const data = await response.json();
-                    document.getElementById('apiStatus').textContent = 'Connected';
-                    document.getElementById('chunkCount').textContent = data.chunk_count;
-                    document.getElementById('vectorDimensions').textContent = data.vector_dimensions;
+                    indicator.className = 'status-indicator';
+                    statusText.textContent = 'Connected';
+                    chunkCount.textContent = data.chunk_count;
                 } else {
                     throw new Error('Status check failed');
                 }
             } catch (error) {
-                document.getElementById('apiStatus').textContent = 'Disconnected';
-                document.getElementById('apiStatus').style.color = '#f44336';
+                indicator.className = 'status-indicator disconnected';
+                statusText.textContent = 'Disconnected';
+                chunkCount.textContent = '-';
                 console.error('Failed to check status:', error);
             }
         }
 
-        // Submit query to API
-        async function submitQuery() {
-            const queryInput = document.getElementById('queryInput');
-            const kInput = document.getElementById('kInput');
-            const submitBtn = document.getElementById('submitBtn');
-            const resultsContent = document.getElementById('resultsContent');
-            const resultsCount = document.getElementById('resultsCount');
+        // Setup input handling
+        function setupInputHandling() {
+            const input = document.getElementById('messageInput');
+            
+            // Auto-resize textarea
+            input.addEventListener('input', () => {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+            });
 
-            const query = queryInput.value.trim();
-            const k = parseInt(kInput.value) || 5;
+            // Send on Enter (Shift+Enter for new line)
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
 
-            if (!query) {
-                resultsContent.innerHTML = `
-                    <div class="error-message">
-                        Please enter a query before searching.
-                    </div>
-                `;
-                resultsCount.style.display = 'none';
-                return;
+        // Set query from example button
+        function setQuery(query) {
+            const input = document.getElementById('messageInput');
+            input.value = query;
+            input.focus();
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+        }
+
+        // Send message
+        async function sendMessage() {
+            if (isProcessing) return;
+
+            const input = document.getElementById('messageInput');
+            const sendButton = document.getElementById('sendButton');
+            const query = input.value.trim();
+
+            if (!query) return;
+
+            // Hide welcome message on first message
+            const welcomeMessage = document.getElementById('welcomeMessage');
+            if (welcomeMessage) {
+                welcomeMessage.style.display = 'none';
             }
 
-            // Show loading state
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Searching...';
-            resultsContent.innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Searching knowledge base...</p>
-                </div>
-            `;
-            resultsCount.style.display = 'none';
+            // Add user message to chat
+            addMessage('user', query);
+            conversationHistory.push({ role: 'user', content: query });
+
+            // Clear input
+            input.value = '';
+            input.style.height = 'auto';
+
+            // Show typing indicator
+            isProcessing = true;
+            sendButton.disabled = true;
+            const typingId = addTypingIndicator();
 
             try {
+                // Call API
                 const response = await fetch(`${API_BASE_URL}/query`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ query, k })
+                    body: JSON.stringify({ query, k: 5 })
                 });
+
+                // Remove typing indicator
+                removeTypingIndicator(typingId);
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.detail || 'Query failed');
+                    throw new Error(error.detail || 'Failed to get response');
                 }
 
                 const data = await response.json();
-                displayResults(data.results);
+
+                // Add assistant response with context
+                addAssistantResponse(data.results);
+                conversationHistory.push({ role: 'assistant', results: data.results });
 
             } catch (error) {
-                resultsContent.innerHTML = `
-                    <div class="error-message">
-                        Error: ${error.message}
-                    </div>
-                `;
-                resultsCount.style.display = 'none';
+                removeTypingIndicator(typingId);
+                addErrorMessage(error.message);
                 console.error('Query failed:', error);
             } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Search';
+                isProcessing = false;
+                sendButton.disabled = false;
             }
         }
 
-        // Display search results
-        function displayResults(results) {
-            const resultsContent = document.getElementById('resultsContent');
-            const resultsCount = document.getElementById('resultsCount');
+        // Add message to chat
+        function addMessage(role, content, contextData = null) {
+            const container = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
 
-            resultsCount.textContent = results.length;
-            resultsCount.style.display = 'inline-block';
+            const avatar = role === 'user' ? '👤' : '🤖';
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-            if (results.length === 0) {
-                resultsContent.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🔍</div>
-                        <p>No results found. Try a different query.</p>
-                    </div>
-                `;
-                return;
+            let contentHtml = escapeHtml(content);
+
+            // Add retrieved context if present
+            if (contextData && contextData.length > 0) {
+                contentHtml += formatRetrievedContext(contextData);
             }
 
-            const resultsHtml = results.map((result, index) => {
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div>
+                    <div class="message-content">${contentHtml}</div>
+                    <div class="message-time">${time}</div>
+                </div>
+            `;
+
+            container.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Add assistant response with context
+        function addAssistantResponse(results) {
+            const container = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Build response text
+            let responseText = "Based on the retrieved context, here's what I found:";
+            if (results.length === 0) {
+                responseText = "I couldn't find any relevant information in the knowledge base. Try rephrasing your question.";
+            }
+
+            const contextHtml = results.length > 0 ? formatRetrievedContext(results) : '';
+
+            messageDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div>
+                    <div class="message-content">
+                        ${escapeHtml(responseText)}
+                        ${contextHtml}
+                    </div>
+                    <div class="message-time">${time}</div>
+                </div>
+            `;
+
+            container.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Format retrieved context snippets
+        function formatRetrievedContext(results) {
+            let html = '<div class="retrieved-context">';
+            html += '<div class="context-header">📚 Retrieved Context</div>';
+            html += '<div class="context-snippets">';
+
+            results.forEach((result, index) => {
+                const similarityPercent = (result.similarity * 100).toFixed(1);
                 const similarityClass = result.similarity > 0.8 ? '' : 
                                        result.similarity > 0.6 ? 'medium' : 'low';
-                const similarityPercent = (result.similarity * 100).toFixed(1);
 
-                return `
-                    <div class="result-item">
-                        <div class="result-text">${escapeHtml(result.text)}</div>
-                        <div class="result-meta">
-                            <span class="result-rank">#${index + 1}</span>
-                            <span class="similarity-badge ${similarityClass}">
-                                ${similarityPercent}% match
-                            </span>
+                html += `
+                    <div class="context-snippet">
+                        <div>${escapeHtml(result.text)}</div>
+                        <div class="snippet-meta">
+                            <span class="snippet-rank">#${index + 1}</span>
+                            <span class="snippet-similarity ${similarityClass}">${similarityPercent}% match</span>
                         </div>
                     </div>
                 `;
-            }).join('');
+            });
 
-            resultsContent.innerHTML = resultsHtml;
+            html += '</div></div>';
+            return html;
+        }
+
+        // Add typing indicator
+        function addTypingIndicator() {
+            const container = document.getElementById('chatContainer');
+            const id = 'typing-' + Date.now();
+            const typingDiv = document.createElement('div');
+            typingDiv.id = id;
+            typingDiv.className = 'message assistant';
+            typingDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div>
+                    <div class="message-content typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(typingDiv);
+            scrollToBottom();
+            return id;
+        }
+
+        // Remove typing indicator
+        function removeTypingIndicator(id) {
+            const typingDiv = document.getElementById(id);
+            if (typingDiv) {
+                typingDiv.remove();
+            }
+        }
+
+        // Add error message
+        function addErrorMessage(errorText) {
+            const container = document.getElementById('chatContainer');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'message assistant';
+            errorDiv.innerHTML = `
+                <div class="message-avatar">⚠️</div>
+                <div>
+                    <div class="message-content">
+                        <div class="error-message">Error: ${escapeHtml(errorText)}</div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(errorDiv);
+            scrollToBottom();
+        }
+
+        // Scroll to bottom of chat
+        function scrollToBottom() {
+            const container = document.getElementById('chatContainer');
+            container.scrollTop = container.scrollHeight;
         }
 
         // Escape HTML to prevent XSS
@@ -441,19 +679,6 @@
             div.textContent = text;
             return div.innerHTML;
         }
-
-        // Handle Enter key in query input
-        document.getElementById('queryInput').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
-                submitQuery();
-            }
-        });
-
-        // Check status on load
-        checkStatus();
-
-        // Refresh status every 30 seconds
-        setInterval(checkStatus, 30000);
     </script>
 </body>
 </html>
