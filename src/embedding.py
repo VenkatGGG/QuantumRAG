@@ -73,8 +73,16 @@ class EmbeddingPipeline:
     def __init__(self):
         """Initialize the embedding pipeline with model and tokenizer."""
         # Load model and tokenizer locally from cache
-        self.tokenizer = AutoTokenizer.from_pretrained(self.MODEL_NAME)
-        self.model = AutoModel.from_pretrained(self.MODEL_NAME)
+        # Use local_files_only=True to ensure we only use the pre-downloaded model
+        # This prevents any runtime HF Hub requests and warnings
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.MODEL_NAME,
+            local_files_only=True
+        )
+        self.model = AutoModel.from_pretrained(
+            self.MODEL_NAME,
+            local_files_only=True
+        )
         
         # Set model to evaluation mode
         self.model.eval()

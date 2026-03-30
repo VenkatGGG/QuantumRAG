@@ -24,5 +24,11 @@ print("This may take a few minutes...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModel.from_pretrained(MODEL_NAME)
 
+# Verify the model can be loaded with local_files_only=True (runtime mode)
+print("Verifying model can be loaded in offline mode...")
+tokenizer_verify = AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
+model_verify = AutoModel.from_pretrained(MODEL_NAME, local_files_only=True)
+print("Offline verification successful!")
+
 print(f"Model {MODEL_NAME} successfully downloaded and cached!")
 print("The model is now available at runtime without additional downloads.")
