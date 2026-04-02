@@ -6,8 +6,8 @@ commands:
   lint: echo "No linter configured"
   test-math: python -m pytest tests/test_embedding.py tests/test_vector_store.py -v
   start: uvicorn src.main:app --host 0.0.0.0 --port 8000
-  scrape: python scripts/scrape_articles.py
-  pipeline: python scripts/run_full_pipeline.py
+  scrape: python scripts/pipeline/scrape_articles.py
+  pipeline: python scripts/pipeline/run_full_pipeline.py
 
 services:
   api:
