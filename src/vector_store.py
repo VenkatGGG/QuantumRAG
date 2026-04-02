@@ -116,6 +116,7 @@ class VectorStore:
         Returns:
             List of dicts with 'text' and 'similarity' keys.
             Sorted by similarity descending.
+            Returns empty list if store contains no vectors.
         
         Raises:
             ValueError: If query dimension doesn't match store dimension.

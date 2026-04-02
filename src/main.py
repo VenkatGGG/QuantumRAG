@@ -9,11 +9,12 @@ This module implements the FastAPI backend with:
 """
 
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -21,12 +22,38 @@ from fastapi.responses import FileResponse, JSONResponse
 from src.vector_store import VectorStore
 from src.embedding import EmbeddingPipeline
 
-# Initialize global instances
-vector_store: VectorStore = VectorStore(dimension=384)
-embedding_pipeline: Optional[EmbeddingPipeline] = None
-
 # Path to HDF5 file
 HDF5_PATH = Path("data/vector_store.h5")
+
+
+# Dependency injection state
+class AppState:
+    """Application state container for dependency injection."""
+    
+    def __init__(self) -> None:
+        self.vector_store: VectorStore = VectorStore(dimension=384)
+        self.embedding_pipeline: Optional[EmbeddingPipeline] = None
+
+
+# Global state instance (initialized at startup)
+_app_state = AppState()
+
+
+def get_vector_store() -> VectorStore:
+    """Dependency provider for vector store."""
+    return _app_state.vector_store
+
+
+async def get_embedding_pipeline() -> EmbeddingPipeline:
+    """Dependency provider for embedding pipeline (lazy initialization)."""
+    if _app_state.embedding_pipeline is None:
+        print("Initializing embedding pipeline...")
+        loop = asyncio.get_event_loop()
+        _app_state.embedding_pipeline = await loop.run_in_executor(
+            None, EmbeddingPipeline
+        )
+        print("Embedding pipeline ready")
+    return _app_state.embedding_pipeline
 
 
 def load_vector_store() -> None:
@@ -35,32 +62,17 @@ def load_vector_store() -> None:
     If the HDF5 file exists, load vectors and texts into the global
     vector store instance. If it doesn't exist, the store remains empty.
     """
-    global vector_store
-    
     if HDF5_PATH.exists():
         try:
-            vector_store.load_from_hdf5(str(HDF5_PATH))
+            _app_state.vector_store.load_from_hdf5(str(HDF5_PATH))
             print(f"Loaded vector store from {HDF5_PATH}")
-            print(f"  - Chunks: {vector_store.size}")
-            print(f"  - Dimensions: {vector_store.dimension}")
+            print(f"  - Chunks: {_app_state.vector_store.size}")
+            print(f"  - Dimensions: {_app_state.vector_store.dimension}")
         except Exception as e:
             print(f"Warning: Failed to load vector store from {HDF5_PATH}: {e}")
             # Continue with empty store
     else:
         print(f"Note: HDF5 file not found at {HDF5_PATH}, starting with empty vector store")
-
-
-def init_embedding_pipeline() -> None:
-    """Initialize the embedding pipeline on first use.
-    
-    This is done lazily to avoid slow startup times.
-    """
-    global embedding_pipeline
-    
-    if embedding_pipeline is None:
-        print("Initializing embedding pipeline...")
-        embedding_pipeline = EmbeddingPipeline()
-        print("Embedding pipeline ready")
 
 
 @asynccontextmanager
@@ -116,7 +128,9 @@ class StatusResponse(BaseModel):
 
 # API Endpoints
 @app.get("/status", response_model=StatusResponse)
-async def get_status() -> StatusResponse:
+async def get_status(
+    vector_store: VectorStore = Depends(get_vector_store)
+) -> StatusResponse:
     """Get the current status of the vector store.
     
     Returns:
@@ -129,7 +143,10 @@ async def get_status() -> StatusResponse:
 
 
 @app.post("/query", response_model=QueryResponse)
-async def query(request: QueryRequest) -> QueryResponse:
+async def query(
+    request: QueryRequest,
+    vector_store: VectorStore = Depends(get_vector_store)
+) -> QueryResponse:
     """Query the vector store for similar chunks.
     
     Embeds the query text using the embedding pipeline and searches
@@ -154,7 +171,7 @@ async def query(request: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=400, detail="k must be at least 1")
     
     # Initialize embedding pipeline if needed
-    init_embedding_pipeline()
+    embedding_pipeline = await get_embedding_pipeline()
     
     # Check if vector store has data
     if vector_store.size == 0:
@@ -206,6 +223,8 @@ async def serve_frontend():
 
 # Health check endpoint (for Docker)
 @app.get("/health")
-async def health_check():
+async def health_check(
+    vector_store: VectorStore = Depends(get_vector_store)
+):
     """Health check endpoint for container orchestration."""
     return {"status": "healthy", "chunks": vector_store.size}

@@ -32,8 +32,15 @@ class HeuristicChunker:
     OVERLAP = 50      # Tokens of overlap between consecutive chunks
     
     def __init__(self):
-        """Initialize the chunker with the embedding model's tokenizer."""
-        self.tokenizer = AutoTokenizer.from_pretrained(self.MODEL_NAME)
+        """Initialize the chunker. Model is loaded lazily on first use."""
+        self._tokenizer = None
+    
+    @property
+    def tokenizer(self):
+        """Lazy-load the tokenizer on first access."""
+        if self._tokenizer is None:
+            self._tokenizer = AutoTokenizer.from_pretrained(self.MODEL_NAME)
+        return self._tokenizer
     
     def count_tokens(self, text: str) -> int:
         """Count the number of tokens in a text string.
@@ -46,9 +53,9 @@ class HeuristicChunker:
         """
         if not text:
             return 0
-        # Use the tokenizer to get accurate token count
-        # encode() returns token IDs including special tokens, so we subtract 2 for [CLS] and [SEP]
         tokens = self.tokenizer.encode(text, add_special_tokens=True)
+        # encode() returns token IDs including special tokens ([CLS] and [SEP])
+        # This matches the embedding model's tokenization
         return len(tokens)
     
     def _split_into_sentences(self, text: str) -> List[str]:
@@ -217,7 +224,53 @@ class HeuristicChunker:
             return self._truncate_text_to_tokens(text, max_tokens)
         
         return " ".join(result_sentences)
-    
+
+    def _find_overlap_tokens(self, chunk1: str, chunk2: str) -> int:
+        """Estimate token overlap between two consecutive chunks.
+        
+        Uses a sliding window approach to find the approximate number of
+        overlapping tokens between the end of chunk1 and the start of chunk2.
+        
+        Args:
+            chunk1: First chunk text.
+            chunk2: Second chunk text (should have overlap with chunk1).
+            
+        Returns:
+            Estimated number of overlapping tokens.
+        """
+        # Tokenize both chunks
+        tokens1 = self.tokenizer.encode(chunk1, add_special_tokens=False)
+        tokens2 = self.tokenizer.encode(chunk2, add_special_tokens=False)
+        
+        # Look for the last part of chunk1 at the start of chunk2
+        # Try different overlap sizes, starting from the expected overlap
+        for overlap_size in range(min(self.OVERLAP + 20, len(tokens1)), max(0, self.OVERLAP - 20), -1):
+            if overlap_size > len(tokens2):
+                continue
+            # Get the last overlap_size tokens from chunk1
+            end_tokens1 = tokens1[-overlap_size:]
+            # Get the first overlap_size tokens from chunk2
+            start_tokens2 = tokens2[:overlap_size]
+            # Check if they match
+            if end_tokens1 == start_tokens2:
+                return overlap_size
+        
+        # If no exact match found, estimate based on text similarity
+        # Find the longest common substring between end of chunk1 and start of chunk2
+        words1 = chunk1.split()
+        words2 = chunk2.split()
+        
+        # Try to find matching words at the boundary
+        for i in range(min(len(words1), 20), 0, -1):
+            end_words1 = words1[-i:]
+            start_words2 = words2[:i]
+            if end_words1 == start_words2:
+                # Estimate token count for these words
+                text = " ".join(end_words1)
+                return self.count_tokens(text)
+        
+        return 0  # No overlap detected
+
     def _truncate_text_to_tokens(self, text: str, max_tokens: int) -> str:
         """Truncate text to max_tokens or fewer (emergency fallback).
         
@@ -275,7 +328,7 @@ class HeuristicChunker:
             text: Text to chunk.
             
         Returns:
-            List of text chunks.
+            List of text chunks. Returns empty list if text is empty or contains only whitespace.
         """
         if not text or not text.strip():
             return []
@@ -411,7 +464,7 @@ class HeuristicChunker:
             
             # Ensure we always make progress (at least one new sentence)
             if current_sentence_idx >= idx and idx < len(sentences):
-                current_sentence_idx = idx
+                current_sentence_idx = idx + 1  # Force progress to next sentence
         
         return chunks
 

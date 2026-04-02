@@ -5,7 +5,10 @@ to verify search, save/load, and HDF5 persistence.
 """
 
 import sys
-sys.path.insert(0, '/Users/sri/Desktop/silly_experiments/Droid_Project')
+from pathlib import Path
+
+# Add parent directory to path for proper imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import tempfile
 import os

@@ -109,10 +109,12 @@ class TestEmbeddingPipeline:
         
         # Verify from_pretrained was called with local model only
         mock_model_class.from_pretrained.assert_called_once_with(
-            "sentence-transformers/all-MiniLM-L6-v2"
+            "sentence-transformers/all-MiniLM-L6-v2",
+            local_files_only=True
         )
         mock_tokenizer_class.from_pretrained.assert_called_once_with(
-            "sentence-transformers/all-MiniLM-L6-v2"
+            "sentence-transformers/all-MiniLM-L6-v2",
+            local_files_only=True
         )
     
     @patch('src.embedding.AutoModel')

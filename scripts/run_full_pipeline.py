@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Run the full data pipeline: scrape, chunk, embed, and save to HDF5."""
+
 import sys
-sys.path.insert(0, '/Users/sri/Desktop/silly_experiments/Droid_Project')
+from pathlib import Path
+
+# Add parent directory to path for proper imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.wikipedia_scraper import fetch_articles, save_articles
 from src.heuristic_chunker import HeuristicChunker

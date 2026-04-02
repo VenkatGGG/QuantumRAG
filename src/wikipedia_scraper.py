@@ -1,8 +1,32 @@
 """Wikipedia scraper module for fetching articles."""
 import json
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import httpx
+
+
+class WikipediaAPIError(Exception):
+    """Custom exception for Wikipedia API errors.
+    
+    Preserves the original exception context for better error handling.
+    """
+    
+    def __init__(self, message: str, original_error: Exception = None):
+        """Initialize the error with message and optional original exception.
+        
+        Args:
+            message: Human-readable error message.
+            original_error: The original exception that caused this error, if any.
+        """
+        super().__init__(message)
+        self.original_error = original_error
+        self.message = message
+    
+    def __str__(self) -> str:
+        """Return string representation of the error."""
+        if self.original_error:
+            return f"{self.message} (caused by {type(self.original_error).__name__}: {self.original_error})"
+        return self.message
 
 
 class WikipediaScraper:
@@ -116,14 +140,17 @@ class WikipediaScraper:
         
         return filtered
     
-    def _fetch_page_content(self, title: str) -> Dict[str, Any]:
+    def _fetch_page_content(self, title: str) -> Optional[Dict[str, Any]]:
         """Fetch page content from Wikipedia API.
         
         Args:
             title: Page title to fetch.
             
         Returns:
-            Dictionary with title, url, and text.
+            Dictionary with title, url, and text, or None if page is missing.
+            
+        Raises:
+            WikipediaAPIError: If the API request fails.
         """
         self._apply_rate_limit()
         
@@ -162,8 +189,7 @@ class WikipediaScraper:
                 "text": page.get("extract", "")
             }
         except Exception as e:
-            print(f"Error fetching {title}: {e}")
-            return None
+            raise WikipediaAPIError(f"Failed to fetch page content for '{title}'", e)
     
     def _search_articles(self, search_term: str, limit: int = 10) -> List[str]:
         """Search Wikipedia for articles related to a search term.
@@ -176,6 +202,9 @@ class WikipediaScraper:
             
         Returns:
             List of article titles matching the search.
+            
+        Raises:
+            WikipediaAPIError: If the API request fails.
         """
         self._apply_rate_limit()
         
@@ -202,8 +231,7 @@ class WikipediaScraper:
             titles = [result["title"] for result in search_results]
             return titles
         except Exception as e:
-            print(f"Error searching for '{search_term}': {e}")
-            return []
+            raise WikipediaAPIError(f"Failed to search for '{search_term}'", e)
     
     def fetch_articles(self, search_term: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Fetch articles from Wikipedia related to search term.

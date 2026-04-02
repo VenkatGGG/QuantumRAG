@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """Analyze chunk statistics in the vector store or from chunking directly."""
+
 import sys
-sys.path.insert(0, '/Users/sri/Desktop/silly_experiments/Droid_Project')
+from pathlib import Path
+
+# Add parent directory to path for proper imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import json
 import h5py
 import numpy as np
+from typing import List, Dict, Any, Tuple
 from src.heuristic_chunker import HeuristicChunker
 
 
-def load_articles(path="data/raw_articles.json"):
+def load_articles(path: str = "data/raw_articles.json") -> List[Dict[str, Any]]:
     """Load articles from JSON file."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def analyze_corpus_from_articles():
+def analyze_corpus_from_articles() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Analyze chunk statistics by re-chunking the raw articles."""
     print("=" * 60)
     print("CHUNK ANALYSIS - Re-chunking raw articles")
@@ -130,5 +135,11 @@ def analyze_corpus_from_articles():
     return all_chunks, all_overlaps
 
 
-if __name__ == "__main__":
+def main() -> int:
+    """Run the chunk analysis."""
     analyze_corpus_from_articles()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
