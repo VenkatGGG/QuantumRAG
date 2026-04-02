@@ -39,11 +39,25 @@ def mock_embedding_pipeline():
 @pytest.fixture
 def client(mock_vector_store, mock_embedding_pipeline):
     """Create a test client with mocked dependencies."""
-    with patch("src.main.vector_store", mock_vector_store), \
-         patch("src.main.embedding_pipeline", mock_embedding_pipeline):
-        from src.main import app
+    # Import after patching to ensure we get the patched version
+    with patch.dict("os.environ", {"TESTING": "true"}):
+        from src.main import app, get_vector_store, get_embedding_pipeline
+        
+        # Override dependencies
+        def mock_get_vector_store():
+            return mock_vector_store
+            
+        async def mock_get_embedding_pipeline():
+            return mock_embedding_pipeline
+        
+        app.dependency_overrides[get_vector_store] = mock_get_vector_store
+        app.dependency_overrides[get_embedding_pipeline] = mock_get_embedding_pipeline
+        
         with TestClient(app) as test_client:
             yield test_client
+        
+        # Clean up overrides
+        app.dependency_overrides.clear()
 
 
 class TestStatusEndpoint:
