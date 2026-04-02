@@ -1,140 +1,132 @@
 # Quantum Cryptography RAG
 
-Local Retrieval-Augmented Generation application focused on quantum cryptography. The project scrapes Wikipedia content, chunks it with sentence-aware heuristics, generates embeddings locally with raw `transformers` + `torch`, stores vectors in pure NumPy with HDF5 persistence, and serves retrieval through a FastAPI backend plus a vanilla HTML/JS chat UI.
+Quantum Cryptography RAG is a local-first retrieval application built to answer questions over a focused knowledge base of Wikipedia content about quantum cryptography and adjacent topics.
 
-This repo intentionally avoids orchestration and vector database frameworks such as LangChain, LlamaIndex, FAISS, ChromaDB, and `sentence-transformers`.
+The project was built from first principles on purpose. It does not rely on orchestration frameworks or vector databases. Retrieval, embeddings, similarity search, persistence, API delivery, and the browser experience are all implemented directly in the codebase using standard libraries such as `transformers`, `torch`, `numpy`, `h5py`, `FastAPI`, and vanilla HTML/JavaScript.
 
-## What It Does
+## Why This Project Exists
 
-- Scrapes the top Wikipedia search hits for `Quantum Cryptography`
-- Filters search results toward quantum-cryptography relevance
-- Splits article text into sentence-aligned chunks with a hard `<= 500` token cap
-- Uses sentence-aligned overlap targeted toward `50` tokens
-- Loads `sentence-transformers/all-MiniLM-L6-v2` locally with raw `transformers`
-- Implements manual mean pooling over `last_hidden_state`
-- Stores embeddings and texts in an in-memory NumPy-backed vector store
-- Persists vectors and texts to HDF5
-- Exposes `/status`, `/query`, `/health`, and `/`
-- Serves a vanilla chat-style frontend
+Most RAG demos hide the hard parts behind abstraction layers. This project does the opposite.
 
-## Current Repository Snapshot
+It is designed to show what a localized RAG system looks like when each layer is explicit:
 
-At the time of this README update, the committed artifacts in [`data/raw_articles.json`](/Users/sri/Desktop/silly_experiments/Droid_Project/data/raw_articles.json) and [`data/vector_store.h5`](/Users/sri/Desktop/silly_experiments/Droid_Project/data/vector_store.h5) contain:
+- article discovery and ingestion
+- sentence-aware chunking
+- local embedding generation
+- manual mean pooling
+- pure NumPy similarity search
+- HDF5 persistence
+- a small API surface
+- a simple chat interface
 
-- `10` scraped articles
-- `190` persisted chunks / vectors
-- embedding dimension `384`
+The result is a system that is easy to reason about, easy to inspect, and practical to run locally or in Docker.
 
-The committed article titles are:
+## What The System Does
 
-- `Quantum cryptography`
-- `Post-quantum cryptography`
-- `Quantum computing`
-- `NIST Post-Quantum Cryptography Standardization`
-- `Quantum key distribution`
-- `Relativistic quantum cryptography`
-- `Quantum network`
-- `Harvest now, decrypt later`
-- `Quantum information science`
-- `Quantum entanglement`
+At a high level, the application turns a set of Wikipedia articles into a searchable local knowledge base, then exposes that knowledge base through a lightweight chat-style UI.
 
-## Architecture
-
-```text
-Wikipedia API
-  -> scraper + relevance filter
-  -> sentence-aware chunker
-  -> local embedding pipeline
-  -> NumPy vector store
-  -> HDF5 persistence
-  -> FastAPI backend
-  -> vanilla HTML/JS chat frontend
+```mermaid
+flowchart LR
+    A["Wikipedia Search + Fetch"] --> B["Sentence-Aware Chunking"]
+    B --> C["Local MiniLM Embeddings"]
+    C --> D["NumPy Vector Store"]
+    D --> E["HDF5 Persistence"]
+    E --> F["FastAPI Backend"]
+    F --> G["Vanilla Chat UI"]
 ```
 
-Core implementation files:
+There are two distinct flows in the product.
 
-- [`src/wikipedia_scraper.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/wikipedia_scraper.py): Wikipedia search, rate limiting, topical filtering, article fetch, JSON save
-- [`src/heuristic_chunker.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/heuristic_chunker.py): sentence-aware chunking with Option A contract
-- [`src/embedding.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/embedding.py): raw model loading, manual mean pooling, NumPy conversion
-- [`src/vector_store.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/vector_store.py): cosine similarity search and HDF5 save/load
-- [`src/main.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/main.py): FastAPI app, lifespan loading, lazy embedding initialization, static frontend serving
-- [`static/index.html`](/Users/sri/Desktop/silly_experiments/Droid_Project/static/index.html): chat transcript UI with async `/query` calls
+### 1. Build The Knowledge Base
 
-## Chunking Contract
+The offline pipeline collects source material, breaks it into retrieval-friendly chunks, generates embeddings locally, and persists the results so the application can start quickly later.
 
-This project follows the Option A contract described in [`validation-contract.md`](/Users/sri/Desktop/silly_experiments/Droid_Project/validation-contract.md):
+```mermaid
+flowchart TD
+    A["Search Wikipedia for quantum cryptography topics"] --> B["Fetch raw article text"]
+    B --> C["Split text into sentence-aligned chunks"]
+    C --> D["Embed each chunk with all-MiniLM-L6-v2"]
+    D --> E["Store vectors and text in HDF5"]
+```
 
-- chunk boundaries do not cut sentences
-- each chunk is at most `500` tokenizer tokens
-- overlap is sentence-aligned and chosen to be as close as practical to `50` tokens
-- `50` is a target, not a mathematical guarantee
+### 2. Answer A Query
 
-This is important because exact token overlap and strict sentence-boundary preservation are not always simultaneously achievable when sentence lengths vary.
+At runtime, the application embeds the user’s question locally, runs cosine similarity search against the persisted vectors, and returns the most relevant chunks to the frontend.
 
-## Embedding and Retrieval Details
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Chat UI
+    participant API as FastAPI
+    participant EMB as Embedding Pipeline
+    participant VS as Vector Store
 
-Model:
+    User->>UI: Ask a question
+    UI->>API: POST /query
+    API->>EMB: Embed query locally
+    API->>VS: Run cosine similarity search
+    VS-->>API: Return top matching chunks
+    API-->>UI: Send ranked results
+    UI-->>User: Display retrieved context
+```
 
-- `sentence-transformers/all-MiniLM-L6-v2`
-- loaded via `AutoTokenizer` and `AutoModel`
-- loaded with `local_files_only=True`
+## What Makes It Different
 
-Mean pooling is implemented manually in [`src/embedding.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/embedding.py) using:
+- Local by design. The embedding model runs on your machine and the persisted store lives on disk.
+- Minimal by design. There is no LangChain, LlamaIndex, FAISS, ChromaDB, or `sentence-transformers`.
+- Transparent by design. Mean pooling and cosine similarity are implemented directly, so the math is visible in the code.
+- Practical by design. The app ships with a FastAPI backend, a browser UI, and Docker support.
+
+## Retrieval Design
+
+The corpus is built from Wikipedia articles related to quantum cryptography. Text is chunked with sentence boundaries preserved, then embedded with `sentence-transformers/all-MiniLM-L6-v2` loaded through raw `transformers`.
+
+The chunking strategy follows a sentence-aligned contract:
+
+- chunks do not cut sentences
+- each chunk stays within a 500-token ceiling
+- overlap targets roughly 50 tokens while staying sentence-aligned
+
+That tradeoff is intentional. Exact token overlap and strict sentence integrity are not always simultaneously possible when sentence lengths vary, so the implementation optimizes for readable, consistent chunks rather than artificial precision.
+
+## Embeddings And Search
+
+Embeddings are generated locally with:
+
+- `AutoTokenizer`
+- `AutoModel`
+- manual mean pooling over `last_hidden_state`
+
+The pooling formula used by the application is:
 
 ```text
 E = sum(T_i * M_i) / max(sum(M_i), 1e-9)
 ```
 
-Cosine similarity is implemented manually in [`src/vector_store.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/src/vector_store.py) using:
+Search is handled with manual cosine similarity over NumPy arrays:
 
 ```text
 similarity = dot(A, B) / (||A|| * ||B||)
 ```
 
-Embeddings are converted with `detach().cpu().numpy()` before storage/search.
+Texts and vectors are persisted in HDF5 so the store survives process restarts and container restarts.
 
-## Repository Layout
+## Product Experience
 
-```text
-.
-├── src/
-├── static/
-├── data/
-├── scripts/
-│   ├── analysis/
-│   ├── manual_tests/
-│   └── pipeline/
-├── tests/
-│   └── test_scripts/
-├── Dockerfile
-├── docker-compose.yml
-├── pytest.ini
-├── requirements.txt
-├── setup.py
-├── DESIGN.md
-├── validation-contract.md
-└── README.md
-```
+The frontend is intentionally simple. It is a chat-style interface built with plain HTML, CSS, and JavaScript. A user asks a question, the backend retrieves the most relevant context, and the UI renders ranked snippets with similarity scores.
 
-Useful entrypoints:
+The backend exposes a very small surface area:
 
-- [`scripts/pipeline/scrape_articles.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/pipeline/scrape_articles.py)
-- [`scripts/pipeline/run_full_pipeline.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/pipeline/run_full_pipeline.py)
-- [`scripts/download_model.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/download_model.py)
-- [`scripts/manual_tests/manual_chunker.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/manual_tests/manual_chunker.py)
-- [`scripts/manual_tests/manual_embedding.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/manual_tests/manual_embedding.py)
-- [`scripts/manual_tests/manual_vector_store.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/manual_tests/manual_vector_store.py)
+- `GET /status` returns the number of stored chunks and vector dimensions
+- `POST /query` embeds a question and returns the top matching chunks
+- `GET /health` provides a lightweight health check
+- `GET /` serves the chat UI
 
-## Local Setup
+This keeps the system easy to run, test, and integrate.
 
-### Prerequisites
+## Running It Locally
 
-- Python `3.10+`
-- `venv` or equivalent virtual environment tooling
-
-### Install
-
-From the repository root:
+Create a virtual environment and install dependencies:
 
 ```bash
 python3 -m venv venv
@@ -143,206 +135,101 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-The editable install matters because many helper scripts import `src.*` directly.
-
-### Download the Embedding Model
-
-The embedding pipeline runs with `local_files_only=True`, so the model must already exist in the Hugging Face cache before local inference:
+Download the embedding model into the local Hugging Face cache:
 
 ```bash
-venv/bin/python scripts/download_model.py
+python scripts/download_model.py
 ```
 
-If the model is not cached, local embedding and query calls will fail instead of downloading automatically.
-
-### Run the API
-
-If you want to use the committed `data/vector_store.h5` as-is:
+If you want to rebuild the knowledge base from scratch:
 
 ```bash
-venv/bin/uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+python scripts/pipeline/run_full_pipeline.py
+```
+
+Start the API server:
+
+```bash
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Then open:
 
 - [http://localhost:8000](http://localhost:8000)
 - [http://localhost:8000/docs](http://localhost:8000/docs)
-- [http://localhost:8000/status](http://localhost:8000/status)
 
-### Rebuild the Corpus
+## Running With Docker
 
-To regenerate the dataset from scratch:
+The Docker image is built for a local, repeatable deployment experience.
 
-```bash
-venv/bin/python scripts/pipeline/run_full_pipeline.py
-```
+- CPU PyTorch is installed in the image
+- the embedding model is pre-downloaded at build time
+- runtime is configured for offline Hugging Face access
+- the data directory is mounted so persisted state survives container restarts
 
-This runs:
-
-1. Wikipedia search + scrape
-2. sentence-aware chunking
-3. local embedding generation
-4. HDF5 persistence to [`data/vector_store.h5`](/Users/sri/Desktop/silly_experiments/Droid_Project/data/vector_store.h5)
-
-If you only want the raw scraped articles:
-
-```bash
-venv/bin/python scripts/pipeline/scrape_articles.py
-```
-
-## Docker
-
-The Docker path is designed to be self-contained:
-
-- installs CPU PyTorch
-- pre-downloads the Hugging Face model at build time via [`scripts/download_model.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/download_model.py)
-- sets `HF_HUB_OFFLINE=1` for runtime
-- mounts `./data` into `/app/data` for persistence
-
-Build and run:
+Start the application:
 
 ```bash
 docker compose up --build
 ```
 
-Detached mode:
+Run it in the background:
 
 ```bash
 docker compose up --build -d
-docker compose ps
 ```
 
-Stop:
+Stop it:
 
 ```bash
 docker compose down
 ```
 
-The compose service is defined in [`docker-compose.yml`](/Users/sri/Desktop/silly_experiments/Droid_Project/docker-compose.yml) and exposes port `8000`.
-
-## API Reference
-
-### `GET /status`
-
-Returns vector store metadata.
-
-Example response:
-
-```json
-{
-  "chunk_count": 190,
-  "vector_dimensions": 384
-}
-```
-
-### `POST /query`
-
-Embeds the incoming query, performs NumPy cosine similarity search, and returns the top `k` chunks.
-
-Request:
-
-```json
-{
-  "query": "What is BB84?",
-  "k": 5
-}
-```
-
-Response:
-
-```json
-{
-  "results": [
-    {
-      "text": "Quantum key distribution ...",
-      "similarity": 0.91
-    }
-  ]
-}
-```
-
-Behavior:
-
-- empty `query` returns `400`
-- omitted `k` defaults to `5`
-- `k < 1` returns `400`
-- empty vector store returns `{"results": []}`
-
-### `GET /health`
-
-Container health endpoint.
-
-Example response:
-
-```json
-{
-  "status": "healthy",
-  "chunks": 190
-}
-```
-
-### `GET /`
-
-Serves the vanilla HTML/JS chat interface from [`static/index.html`](/Users/sri/Desktop/silly_experiments/Droid_Project/static/index.html).
-
-## Frontend
-
-The frontend is intentionally framework-free:
-
-- plain HTML/CSS/JS
-- chat transcript with user and assistant messages
-- async `fetch()` calls to `/query`
-- welcome prompts and example questions
-- connection status from `/status`
-- retrieved-context rendering with ranked snippets and similarity scores
-
 ## Testing
 
-Pytest discovery is restricted by [`pytest.ini`](/Users/sri/Desktop/silly_experiments/Droid_Project/pytest.ini) to the [`tests/`](/Users/sri/Desktop/silly_experiments/Droid_Project/tests) tree, so helper scripts under [`scripts/manual_tests/`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts/manual_tests) are not collected as part of the normal automated suite.
+The project includes automated tests and manual validators for the main layers of the system:
 
-Run the main automated suite:
+- scraper behavior
+- chunking behavior
+- mean pooling and embeddings
+- cosine similarity and persistence
+- API endpoints
+- supporting scripts
 
-```bash
-venv/bin/python -m pytest -q
-```
-
-Run targeted suites:
-
-```bash
-venv/bin/python -m pytest -q tests/test_scraper.py
-venv/bin/python -m pytest -q tests/test_chunker.py
-venv/bin/python -m pytest -q tests/test_embedding.py
-venv/bin/python -m pytest -q tests/test_vector_store.py
-venv/bin/python -m pytest -q tests/test_api.py
-```
-
-Run manual validators:
+Run the automated suite:
 
 ```bash
-PYTHONPATH=. venv/bin/python scripts/manual_tests/manual_chunker.py
-PYTHONPATH=. venv/bin/python scripts/manual_tests/manual_embedding.py
-PYTHONPATH=. venv/bin/python scripts/manual_tests/manual_vector_store.py
+python -m pytest -q
 ```
 
-## Known Notes
+Run the manual validators:
 
-- Local scripts under [`scripts/`](/Users/sri/Desktop/silly_experiments/Droid_Project/scripts) assume the project package is importable. Use `pip install -e .` or prefix commands with `PYTHONPATH=.`
-- The FastAPI app lazily initializes the embedding model on first query, but Docker pre-populates the model cache during image build
-- The current automated suite is close to green, but there is still a stale API test in [`tests/test_api.py`](/Users/sri/Desktop/silly_experiments/Droid_Project/tests/test_api.py) that imports a removed `vector_store` global instead of using the current dependency-injected state
-- The corpus is only as good as Wikipedia search relevance and the project’s title-based quantum filtering heuristic
+```bash
+python scripts/manual_tests/manual_chunker.py
+python scripts/manual_tests/manual_embedding.py
+python scripts/manual_tests/manual_vector_store.py
+```
 
-## Example Workflow
+If you are not using an editable install, prefix those manual script commands with `PYTHONPATH=.`.
 
-Typical local workflow:
+## Scope And Limits
 
-1. Create and activate the virtual environment
-2. Install dependencies and run `pip install -e .`
-3. Download the embedding model
-4. Run the full pipeline if you want a fresh corpus
-5. Start `uvicorn`
-6. Open the chat UI in the browser
-7. Ask retrieval questions such as `What is BB84?` or `How does QKD detect eavesdropping?`
+This application is retrieval-first. It returns the most relevant local context for a question; it does not call an external generative model to synthesize a final answer.
 
-## License / Ownership
+That makes it a good fit for:
 
-No explicit license file is currently present in the repository. Add one before publishing or redistributing the project outside your own use.
+- local semantic search
+- RAG pipeline learning
+- architecture demonstrations
+- constrained-domain retrieval
+
+It also means answer quality depends on:
+
+- the quality of the scraped corpus
+- chunking quality
+- the embedding model
+- the ranking behavior of cosine similarity
+
+## Closing Note
+
+This project is best understood as a deliberate, low-abstraction RAG implementation. It is small enough to inspect end to end, but complete enough to run as a real application with persisted state, container support, and a browser interface.
