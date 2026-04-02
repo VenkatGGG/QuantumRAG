@@ -1,10 +1,6 @@
 """Manual verification script for chunker with real articles."""
 
 import sys
-from pathlib import Path
-
-# Add parent directory to path for proper imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.heuristic_chunker import HeuristicChunker
 from src.wikipedia_scraper import fetch_articles, save_articles
@@ -62,7 +58,17 @@ def main() -> int:
             for i in range(min(3, len(chunks) - 1)):
                 chunk1 = chunks[i]
                 chunk2 = chunks[i + 1]
-                overlap_tokens = chunker._find_overlap_tokens(chunk1, chunk2)
+                # Calculate overlap by finding shared sentences
+                chunk1_sentences = [s.strip() for s in chunk1.split('.') if s.strip()]
+                chunk2_sentences = [s.strip() for s in chunk2.split('.') if s.strip()]
+                shared_sentences = []
+                for s1 in chunk1_sentences:
+                    for s2 in chunk2_sentences:
+                        if s1 == s2 or (s1 in s2) or (s2 in s1):
+                            shared_sentences.append(s1)
+                            break
+                overlap_text = ". ".join(shared_sentences)
+                overlap_tokens = chunker.count_tokens(overlap_text) if overlap_text else 0
                 print(f"    Between chunk {i+1} and {i+2}: ~{overlap_tokens} tokens overlap")
 
     print(f"\n{'='*60}")

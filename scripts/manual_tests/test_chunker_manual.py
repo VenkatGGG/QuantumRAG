@@ -1,10 +1,6 @@
 """Manual test script for heuristic chunker."""
 
 import sys
-from pathlib import Path
-
-# Add parent directory to path for proper imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 print("Loading HeuristicChunker...")
 from src.heuristic_chunker import HeuristicChunker, chunk_text

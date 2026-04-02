@@ -2,10 +2,6 @@
 """Debug chunking to understand overlap issues."""
 
 import sys
-from pathlib import Path
-
-# Add parent directory to path for proper imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.heuristic_chunker import HeuristicChunker
 

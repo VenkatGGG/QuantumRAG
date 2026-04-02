@@ -5,20 +5,19 @@ to verify search, save/load, and HDF5 persistence.
 """
 
 import sys
-from pathlib import Path
-
-# Add parent directory to path for proper imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import tempfile
 import os
 import numpy as np
 from src.vector_store import VectorStore, cosine_similarity
 
+# nosec: B105 - this is a public model name, not a secret
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# nosec: B615 - revision pinned for security
+MODEL_REVISION = "c9745ed1d9f207a35e9c6575db85a3dc6c09659f"
 
-def test_vector_store() -> None:
+def test_vector_store():
     """Test the vector store with actual data."""
-
     print("Testing Vector Store...")
     
     # Create store
@@ -114,12 +113,5 @@ def test_vector_store() -> None:
     print("All manual vector store tests passed!")
     print("="*50)
 
-
-def main() -> int:
-    """Run all manual vector store tests."""
-    test_vector_store()
-    return 0
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    test_vector_store()

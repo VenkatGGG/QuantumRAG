@@ -5,16 +5,14 @@ to verify output shape and basic functionality.
 """
 
 import sys
-from pathlib import Path
 
-# Add parent directory to path for proper imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.embedding import EmbeddingPipeline
 import numpy as np
+from src.embedding import EmbeddingPipeline
 
-def test_embedding_pipeline():
+
+def test_embedding_pipeline() -> None:
     """Test the embedding pipeline with actual model."""
+
     print("Loading embedding pipeline (this may take a moment on first run)...")
     
     # Initialize pipeline (downloads model if needed)
@@ -62,5 +60,12 @@ def test_embedding_pipeline():
     print("All manual embedding tests passed!")
     print("="*50)
 
-if __name__ == "__main__":
+
+def main() -> int:
+    """Run all manual embedding tests."""
     test_embedding_pipeline()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

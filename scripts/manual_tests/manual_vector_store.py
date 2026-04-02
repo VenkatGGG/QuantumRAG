@@ -5,18 +5,16 @@ to verify search, save/load, and HDF5 persistence.
 """
 
 import sys
-from pathlib import Path
-
-# Add parent directory to path for proper imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import tempfile
 import os
 import numpy as np
 from src.vector_store import VectorStore, cosine_similarity
 
-def test_vector_store():
+
+def test_vector_store() -> None:
     """Test the vector store with actual data."""
+
     print("Testing Vector Store...")
     
     # Create store
@@ -112,5 +110,12 @@ def test_vector_store():
     print("All manual vector store tests passed!")
     print("="*50)
 
-if __name__ == "__main__":
+
+def main() -> int:
+    """Run all manual vector store tests."""
     test_vector_store()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
